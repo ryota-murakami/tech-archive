@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+site/data/articles.json
+
+# Local agent state and instructions
+.gstack/
+AGENTS.md

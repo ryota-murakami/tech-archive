@@ -1,0 +1,17 @@
+{
+  "name": "tech-archive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A GitHub Pages archive for standalone technical HTML explainers.",
+  "scripts": {
+    "build": "node scripts/build-article-index.mjs",
+    "dev": "node scripts/dev-server.mjs",
+    "test": "node --test",
+    "check": "pnpm test && pnpm build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.15.1"
+}

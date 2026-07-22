@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Laststance Archive, an editorial index of standalone technical explainers.">
+    <meta name="theme-color" content="#f3efe3">
+    <title>Laststance Archive — Technical HTML ledger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Fraunces:opsz,wght@9..144,500;9..144,650&amp;family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#catalog">Skip to article index</a>
+
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Laststance Archive home">
+        <span class="brand-mark">Laststance Archive</span>
+        <span class="brand-note">Research ledger</span>
+      </a>
+      <div class="archive-status" id="archive-status" aria-label="Archive status">
+        <span><strong>—</strong> articles</span>
+        <span><strong>—</strong> months indexed</span>
+        <span>GitHub Pages · HTML</span>
+      </div>
+    </header>
+
+    <section class="page-intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Technical notes · independently readable</p>
+        <h1 id="page-title" data-pretext>A field index for difficult code.</h1>
+      </div>
+      <p class="intro-copy" data-pretext>Every entry is a standalone HTML explainer. Browse the ledger, select a recorded day, then open the original page directly.</p>
+    </section>
+
+    <main class="archive-shell">
+      <aside class="category-rail" aria-labelledby="category-title">
+        <h2 class="rail-heading" id="category-title">
+          <span>Subjects</span>
+          <span id="category-total">—</span>
+        </h2>
+        <nav class="category-list" id="category-list" aria-label="Article categories"></nav>
+      </aside>
+
+      <section class="catalog" id="catalog" aria-labelledby="catalog-title" aria-busy="true">
+        <h2 id="catalog-title" class="eyebrow">Ledger entries</h2>
+        <div class="search-row">
+          <div class="search-field">
+            <label for="search-input">Search article title</label>
+            <input id="search-input" type="search" autocomplete="off" placeholder="Try “stack”, “cache”, or “TypeScript”" aria-controls="article-list">
+          </div>
+          <button class="clear-button" id="clear-button" type="button" disabled>Clear all</button>
+        </div>
+        <div class="result-summary" id="result-summary" aria-live="polite">
+          <span><strong>—</strong> loading entries</span>
+          <span>Committed HTML documents</span>
+        </div>
+        <div class="article-list" id="article-list" aria-live="polite">
+          <div class="loading-state" role="status">
+            <span class="loading-rule" aria-hidden="true"></span>
+            <strong>Opening the ledger…</strong>
+            <p>Reading the generated article index.</p>
+          </div>
+        </div>
+        <nav class="pagination" id="pagination" aria-label="Archive pages"></nav>
+      </section>
+
+      <aside class="calendar-rail" aria-labelledby="calendar-title">
+        <h2 class="rail-heading" id="calendar-title">
+          <span>Date register</span>
+          <span aria-hidden="true">↘</span>
+        </h2>
+        <div class="calendar-card">
+          <div class="calendar-nav">
+            <button type="button" id="previous-month" aria-label="Previous month">←</button>
+            <div class="month-label" id="month-label" aria-live="polite">—</div>
+            <button type="button" id="next-month" aria-label="Next month">→</button>
+          </div>
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+          </div>
+          <div class="calendar-grid" id="calendar-grid" role="group" aria-label="Monthly article calendar"></div>
+          <p class="calendar-note"><strong>Rust dots</strong> mark published entries. Any day can be selected, including quiet days with no record.</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      <span>Laststance Archive · Built from committed HTML documents</span>
+      <span>Index generated at deploy time</span>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

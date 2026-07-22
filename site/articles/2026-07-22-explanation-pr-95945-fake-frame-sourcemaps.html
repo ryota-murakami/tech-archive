@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="How fake React Server Component stack frames lost source-map coverage, why debuggers exposed it, and how PR #95945 made the contract testable." />
+<meta name="archive:title" content="Why your debugger couldn’t find the stack — and how tests finally noticed" />
+<meta name="archive:published" content="2026-07-22" />
+<meta name="archive:type" content="Explain Diff" />
+<meta name="archive:source" content="vercel/next.js · #95945" />
+<meta name="archive:category" content="Debugging" />
+<meta name="archive:category" content="Next.js" />
+<meta name="archive:category" content="Source Maps" />
+<meta name="archive:category" content="Testing" />
+<meta name="archive:reading-minutes" content="10" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="getOriginalStackFrames(error) → null // before #95945" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Why your debugger couldn’t find the stack — and how tests finally noticed" />
+<meta property="og:description" content="A visual explanation of the missing fake-frame source-map contract fixed by Next.js PR #95945." />
+<title>Why your debugger couldn’t find the stack — and how tests finally noticed</title>
+<style>
+  :root {
+    --bg: #f7f4ef;
+    --ink: #1c1917;
+    --muted: #57534e;
+    --card: #fffdf8;
+    --line: #d6d3d1;
+    --accent: #0f766e;
+    --accent-soft: #ccfbf1;
+    --warn: #9a3412;
+    --warn-soft: #ffedd5;
+    --ok: #166534;
+    --ok-soft: #dcfce7;
+    --bad: #991b1b;
+    --bad-soft: #fee2e2;
+    --code-bg: #1e1b18;
+    --code-ink: #f5f5f4;
+    --shadow: 0 10px 30px rgba(28, 25, 23, 0.08);
+    --radius: 14px;
+    --max: 820px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 40%),
+      radial-gradient(circle at top right, rgba(154, 52, 18, 0.06), transparent 35%),
+      var(--bg);
+    line-height: 1.65;
+  }
+
+  .wrap {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 2rem 1.25rem 5rem;
+  }
+
+  header.hero {
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .eyebrow {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.75rem;
+  }
+
+  h1 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    line-height: 1.2;
+    margin: 0 0 0.75rem;
+    font-weight: 700;
+  }
+
+  .lede {
+    font-size: 1.15rem;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+  }
+
+  .chip {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid var(--line);
+  }
+
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin: 2rem 0;
+    box-shadow: var(--shadow);
+  }
+
+  nav.toc h2 {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 0.75rem;
+    color: var(--muted);
+  }
+
+  nav.toc ol {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+
+  nav.toc a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  nav.toc a:hover { text-decoration: underline; }
+
+  section {
+    margin: 3rem 0;
+  }
+
+  h2 {
+    font-size: 1.75rem;
+    margin: 0 0 1rem;
+    scroll-margin-top: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    margin: 2rem 0 0.75rem;
+  }
+
+  p { margin: 0 0 1rem; }
+
+  a { color: var(--accent); }
+
+  .callout {
+    border-radius: var(--radius);
+    padding: 1rem 1.15rem;
+    margin: 1.25rem 0;
+    border: 1px solid var(--line);
+    background: var(--card);
+  }
+
+  .callout.def {
+    border-left: 4px solid var(--accent);
+    background: linear-gradient(90deg, var(--accent-soft), var(--card) 40%);
+  }
+
+  .callout.warn {
+    border-left: 4px solid var(--warn);
+    background: linear-gradient(90deg, var(--warn-soft), var(--card) 40%);
+  }
+
+  .callout.ok {
+    border-left: 4px solid var(--ok);
+    background: linear-gradient(90deg, var(--ok-soft), var(--card) 40%);
+  }
+
+  .callout .label {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  pre, .code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1rem 1.1rem;
+    border-radius: 12px;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 1rem 0 1.25rem;
+  }
+
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: rgba(28, 25, 23, 0.06);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+
+  pre code, .code code {
+    background: none;
+    padding: 0;
+  }
+
+  .diagram {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    box-shadow: var(--shadow);
+  }
+
+  .diagram h4 {
+    margin: 0 0 1rem;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .flow {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .flow-step {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.85rem;
+    align-items: start;
+    padding: 0.85rem 1rem;
+    border-radius: 12px;
+    background: #fafaf9;
+    border: 1px solid var(--line);
+  }
+
+  .flow-num {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--accent);
+    color: white;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .flow-step strong {
+    display: block;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .flow-step span {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .arrow {
+    text-align: center;
+    color: var(--muted);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.85rem;
+    margin: 0.15rem 0;
+  }
+
+  .terminal {
+    background: #0c0a09;
+    color: #e7e5e4;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+    margin: 1rem 0;
+    border: 1px solid #292524;
+  }
+
+  .terminal .good { color: #86efac; }
+  .terminal .bad { color: #fca5a5; }
+  .terminal .dim { color: #a8a29e; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+    margin: 1.25rem 0;
+  }
+
+  @media (max-width: 720px) {
+    .compare { grid-template-columns: 1fr; }
+  }
+
+  .compare .panel {
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    padding: 1rem;
+    background: var(--card);
+  }
+
+  .compare .panel.bad { border-color: #fca5a5; background: var(--bad-soft); }
+  .compare .panel.good { border-color: #86efac; background: var(--ok-soft); }
+
+  .compare .panel h5 {
+    margin: 0 0 0.5rem;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .consumers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin: 1.25rem 0;
+  }
+
+  @media (max-width: 720px) {
+    .consumers { grid-template-columns: 1fr; }
+  }
+
+  .consumer {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1rem;
+  }
+
+  .consumer h5 {
+    margin: 0 0 0.4rem;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .consumer p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+
+  ul.clean {
+    padding-left: 1.2rem;
+  }
+
+  ul.clean li { margin-bottom: 0.45rem; }
+
+  .quiz-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin: 1.25rem 0;
+    box-shadow: var(--shadow);
+  }
+
+  .quiz-card h4 {
+    margin: 0 0 0.85rem;
+    font-size: 1.05rem;
+  }
+
+  .options {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .options button {
+    text-align: left;
+    font: inherit;
+    padding: 0.75rem 0.9rem;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #fafaf9;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .options button:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  .options button:disabled { cursor: default; }
+
+  .options button.correct {
+    background: var(--ok-soft);
+    border-color: #4ade80;
+  }
+
+  .options button.incorrect {
+    background: var(--bad-soft);
+    border-color: #f87171;
+  }
+
+  .feedback {
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 10px;
+    display: none;
+    font-size: 0.95rem;
+  }
+
+  .feedback.show { display: block; }
+  .feedback.ok { background: var(--ok-soft); color: var(--ok); }
+  .feedback.bad { background: var(--bad-soft); color: var(--bad); }
+
+  .score {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 12px;
+    background: var(--accent-soft);
+    border: 1px solid #99f6e4;
+  }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .skip {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0 0 1rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="skip"><a href="../index.html">← Back to Laststance Tech Archive</a></p>
+  <header class="hero">
+    <p class="eyebrow">Explain Diff · vercel/next.js · #95945</p>
+    <h1>Why your debugger couldn’t find the stack — and how tests finally noticed</h1>
+    <p class="lede">
+      Dan Abramov’s PR adds test-only coverage that React’s “fake” Server Component
+      stack frames keep their source maps resolvable — including when an error is
+      thrown inside <code>"use cache"</code> and revived across a Flight boundary.
+    </p>
+    <div class="meta">
+      <span class="chip">Test-only (+411 / −0)</span>
+      <span class="chip">Author: gaearon</span>
+      <span class="chip">Base: canary</span>
+      <a class="chip" href="https://github.com/vercel/next.js/pull/95945" target="_blank" rel="noopener">Open PR ↗</a>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Table of contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#background">Background</a></li>
+      <li><a href="#intuition">Intuition</a></li>
+      <li><a href="#code">Code walkthrough</a></li>
+      <li><a href="#quiz">Quiz</a></li>
+    </ol>
+  </nav>
+
+  <!-- ========== BACKGROUND ========== -->
+  <section id="background">
+    <h2>1. Background</h2>
+
+    <p class="skip">
+      Familiar with RSC Flight errors, fake frames, and <code>patch-error-inspect</code>?
+      Skim to the <a href="#narrow">narrow background</a>, then jump to
+      <a href="#intuition">Intuition</a>.
+    </p>
+
+    <h3>Deep background — what a stack frame even is here</h3>
+
+    <p>
+      When JavaScript throws, the runtime builds a <em>stack</em>: a list of
+      function names and file/line/column positions. Developers trust that list.
+      Debuggers click a frame and land on source. Terminal logs print a codeframe
+      under the caret. None of that works unless the engine’s generated positions
+      can be mapped back to the files you wrote — via <strong>source maps</strong>.
+    </p>
+
+    <p>
+      Next.js App Router complicates this. Server Components do not run in the
+      browser. An error may originate in a cache worker, cross into the Flight
+      stream as serialized data, and be <em>revived</em> as a fresh
+      <code>Error</code> object in a different JavaScript realm. The original
+      V8 call stack is gone. What remains is structured debug info that React
+      ships alongside the payload.
+    </p>
+
+    <div class="callout def">
+      <div class="label">Definition · Fake stack frame</div>
+      <p style="margin:0">
+        A tiny function React builds with <code>eval</code>, padded with newlines
+        and spaces so that calling <code>_()</code> appears at the
+        <em>original</em> line/column. The script is tagged
+        <code>//# sourceURL=about://React/…</code> and usually
+        <code>//# sourceMappingURL=…</code>. When you throw through that chain,
+        Node and debuggers see a real stack that source-maps back to your app.
+      </p>
+    </div>
+
+    <p>
+      React’s Flight client materializes those scripts in
+      <code>createFakeFunction</code>. A simplified shape looks like this:
+    </p>
+
+<pre><code>/* This module was rendered by a Server Component. … */
+({"throwsInCache":
+        _=>
+        _()})
+//# sourceURL=about://React/Cache/file%3A%2F%2F%2F…%2Fpage.js?7
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLC4uLn0=</code></pre>
+
+    <p>
+      The padding is intentional. The call to <code>_()</code> sits at the same
+      line/column as <code>throw new Error(…)</code> in your source. The source
+      map then tells consumers: “generated line 5, column 9 →
+      <code>app/…/page.js</code> line 5, column 9.”
+    </p>
+
+    <div class="diagram">
+      <h4>System diagram · Who consumes the fake-frame source map?</h4>
+      <div class="consumers">
+        <div class="consumer">
+          <h5>① Node source-map cache</h5>
+          <p><code>module.findSourceMap</code> learns about eval’d scripts that carry a mapping URL.</p>
+        </div>
+        <div class="consumer">
+          <h5>② Terminal stacks</h5>
+          <p><code>patch-error-inspect</code> rewrites <code>Error.prepareStackTrace</code> and prints codeframes.</p>
+        </div>
+        <div class="consumer">
+          <h5>③ Attached debugger (CDP)</h5>
+          <p>Chrome DevTools Protocol sees <code>Debugger.scriptParsed</code> with <code>sourceMapURL</code>.</p>
+        </div>
+      </div>
+      <p style="margin:0.5rem 0 0;color:var(--muted);font-size:0.95rem;">
+        All three depend on the same fragile contract: the mapping URL must stay
+        fetchable, and mapped sources must stay well-formed paths — not mangled
+        concatenations like <code>file:/private/var/…</code>.
+      </p>
+    </div>
+
+    <h3 id="narrow">Narrow background — the hole this PR plugs</h3>
+
+    <p>
+      Pull request
+      <a href="https://github.com/vercel/next.js/pull/95936" target="_blank" rel="noopener">#95936</a>
+      broke symbolication of these fake frames. Existing tests kept passing.
+      The breakage was discovered the hard way: someone attached a debugger and
+      watched source maps fail to load.
+    </p>
+
+    <p>
+      That is the classic coverage gap. Message-only assertions (“does the log
+      contain <code>Error: …</code>?”) do not prove that stacks point at the
+      right file with a codeframe, nor that a debugger can resolve
+      <code>sourceMappingURL</code>. Production logs must also avoid leaking the
+      virtual <code>about://React/</code> scheme into user-facing output.
+    </p>
+
+    <div class="callout warn">
+      <div class="label">Why <code>"use cache"</code> is special</div>
+      <p style="margin:0">
+        An error thrown inside a cache function crosses an environment boundary
+        (<code>Cache → Server (Flight client)</code>. The logged error is the one
+        <em>revived</em> by <code>resolveErrorDev</code>, not the original thrown
+        object. Its stack is rebuilt entirely from fake frames. If that revival
+        path loses source maps, you get unhelpful paths or raw virtual URLs —
+        and prior tests did not assert either outcome.
+      </p>
+    </div>
+
+    <p>
+      Next.js helps terminal printing in
+      <code>packages/next/src/server/patch-error-inspect.ts</code>. When a frame’s
+      file looks like <code>about://React/…</code>, it
+      <em>devirtualizes</em> the URL before resolving relative sources:
+    </p>
+
+<pre><code>// packages/next/src/server/lib/source-maps.ts
+export function devirtualizeReactServerURL(sourceURL: string): string {
+  if (sourceURL.startsWith('about://React/')) {
+    // about://React/Server/file://&lt;filename&gt;?42 =&gt; file://&lt;filename&gt;
+    const envIdx = sourceURL.indexOf('/', 'about://React/'.length)
+    const suffixIdx = sourceURL.lastIndexOf('?')
+    if (envIdx &gt; -1 &amp;&amp; suffixIdx &gt; -1) {
+      return decodeURI(sourceURL.slice(envIdx + 1, suffixIdx))
+    }
+  }
+  return sourceURL
+}</code></pre>
+
+    <p>
+      And in the inspector patch, that real URL is what the source-map consumer
+      uses as a base for relative <code>sources</code> entries:
+    </p>
+
+<pre><code>// packages/next/src/server/patch-error-inspect.ts (conceptually)
+const sourceMapURL = devirtualizeReactServerURL(sourceURL) + '.map'</code></pre>
+  </section>
+
+  <!-- ========== INTUITION ========== -->
+  <section id="intuition">
+    <h2>2. Intuition</h2>
+
+    <p>
+      Imagine a toy page. One cache function that always throws:
+    </p>
+
+<pre><code>async function throwsInCache() {
+  'use cache'
+  throw new Error('rsc-error-throw-cached')
+}
+
+export default async function Page() {
+  await connection()
+  await throwsInCache()
+  return null
+}</code></pre>
+
+    <p>
+      What you <em>want</em> in <code>next dev</code> logs looks like this:
+    </p>
+
+    <div class="terminal"><span class="good">Error: rsc-error-throw-cached
+    at throwsInCache (app/rsc-error-throw-cached/page.js:5:9)
+  3 | async function throwsInCache() {
+  4 |   'use cache'
+&gt; 5 |   throw new Error('rsc-error-throw-cached')
+    |         ^
+  6 | }
+environmentName: 'Cache'</span></div>
+
+    <p>
+      What a regression can produce instead:
+    </p>
+
+    <div class="compare">
+      <div class="panel bad">
+        <h5>Broken symbolication</h5>
+        <div class="terminal" style="margin:0"><span class="bad">at throwsInCache (file:/private/var/…/page.js:5:9)</span>
+<span class="dim"># or worse:</span>
+<span class="bad">at Page (about://React/Prerender/…%5Broot-of-the-server%5D…)</span></div>
+      </div>
+      <div class="panel good">
+        <h5>Healthy symbolication</h5>
+        <div class="terminal" style="margin:0"><span class="good">at throwsInCache (app/rsc-error-throw-cached/page.js:5:9)</span>
+<span class="dim">+ codeframe pointing at throw</span>
+<span class="good">environmentName: 'Cache'</span></div>
+      </div>
+    </div>
+
+    <div class="diagram">
+      <h4>Data-flow diagram · Error inside <code>"use cache"</code></h4>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div>
+            <strong>Cache environment throws</strong>
+            <span>Example data: <code>{ name: "Error", message: "rsc-error-throw-cached", stack: [[…]], env: "Cache" }</code></span>
+          </div>
+        </div>
+        <div class="arrow">↓ serialized across Flight</div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div>
+            <strong><code>resolveErrorDev</code> rebuilds the Error</strong>
+            <span>Calls <code>buildFakeCallStack</code> → <code>createFakeFunction</code> → <code>eval</code> of padded script with <code>about://React/Cache/…</code></span>
+          </div>
+        </div>
+        <div class="arrow">↓ consumers look at the revived Error</div>
+        <div class="flow-step">
+          <div class="flow-num">3a</div>
+          <div>
+            <strong>CLI / <code>patch-error-inspect</code></strong>
+            <span>Devirtualize URL → find source map → print <code>app/…/page.js:5:9</code> + codeframe</span>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">3b</div>
+          <div>
+            <strong>Debugger via CDP</strong>
+            <span>Sees <code>Debugger.scriptParsed { url: "about://React/…", sourceMapURL }</code>; frontend loads the map (data URL, file, or <code>Network.loadNetworkResource</code>)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      The core intuition of the PR is simple: <strong>assert the contract at every
+      consumer</strong>. Do not only check that an error message appears. Check
+      that (1) terminal stacks are fully symbolicated with codeframes, (2) a real
+      debugger attachment can resolve every fake-frame source map and map the
+      padded <code>_()</code> call back to the fixture file, and (3) production
+      never prints raw <code>about://React/</code> URLs.
+    </p>
+
+    <div class="diagram">
+      <h4>UI sketch · What a debugger frontend “sees”</h4>
+      <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;font-family:ui-sans-serif,system-ui,sans-serif;font-size:0.9rem;">
+        <div style="background:#292524;color:#e7e5e4;padding:0.55rem 0.85rem;display:flex;gap:0.75rem;">
+          <span>Sources</span>
+          <span style="opacity:0.6">Console</span>
+          <span style="opacity:0.6">Network</span>
+        </div>
+        <div style="display:grid;grid-template-columns:220px 1fr;min-height:180px;">
+          <div style="background:#f5f5f4;border-right:1px solid var(--line);padding:0.75rem;font-size:0.8rem;">
+            <div style="color:var(--muted);margin-bottom:0.4rem;">Scripts</div>
+            <div style="padding:0.35rem 0.4rem;background:var(--accent-soft);border-radius:6px;margin-bottom:0.35rem;">
+              about://React/Cache/…/page.js?7
+            </div>
+            <div style="padding:0.35rem 0.4rem;opacity:0.55;">.next/server/…</div>
+            <div style="padding:0.35rem 0.4rem;opacity:0.55;">node:internal/…</div>
+          </div>
+          <div style="padding:0.85rem;background:white;">
+            <div style="color:var(--muted);font-size:0.75rem;margin-bottom:0.5rem;">Mapped from sourceMappingURL →</div>
+            <pre style="margin:0;background:#fafaf9;color:var(--ink);border:1px solid var(--line);white-space:pre;">  3 | async function throwsInCache() {
+  4 |   'use cache'
+&gt; 5 |   throw new Error('rsc-error-throw-cached')
+    |         ^</pre>
+          </div>
+        </div>
+      </div>
+      <p style="margin:0.85rem 0 0;color:var(--muted);font-size:0.95rem;">
+        The new CDP test automates “open DevTools and click the frame” without a human.
+      </p>
+    </div>
+  </section>
+
+  <!-- ========== CODE ========== -->
+  <section id="code">
+    <h2>3. Code walkthrough</h2>
+
+    <p>
+      This PR touches four files, all under <code>test/</code>. No production
+      runtime changes. We will walk them in the order that builds understanding:
+      fixture → terminal assertion → restored validation assertion → CDP harness.
+    </p>
+
+    <h3>3.1 New fixture: throw inside <code>"use cache"</code></h3>
+
+    <p>
+      File:
+      <code>test/e2e/app-dir/server-source-maps/fixtures/default/app/rsc-error-throw-cached/page.js</code>
+    </p>
+
+<pre><code>import { connection } from 'next/server'
+
+async function throwsInCache() {
+  'use cache'
+  throw new Error('rsc-error-throw-cached')
+}
+
+export default async function Page() {
+  await connection()
+  await throwsInCache()
+  return null
+}</code></pre>
+
+    <p>
+      <code>await connection()</code> opts the route into dynamic rendering so the
+      cache call actually runs at request time. The throw is the whole point:
+      it forces the Flight revival path (<code>resolveErrorDev</code>) rather
+      than a same-realm stack.
+    </p>
+
+    <h3>3.2 Assert the symbolicated CLI stack</h3>
+
+    <p>
+      In <code>server-source-maps.test.ts</code>, a new test renders that page
+      and checks two different contracts depending on mode:
+    </p>
+
+    <ul class="clean">
+      <li>
+        <strong>Dev:</strong> full stack + codeframe pointing at the
+        <code>throw</code>, and <code>environmentName: 'Cache'</code> proving the
+        logged error is the revived one.
+      </li>
+      <li>
+        <strong>Prod (<code>next start</code>):</strong> runtime stacks are not
+        fully sourcemapped, but output must <em>not</em> contain
+        <code>about://React/</code>.
+      </li>
+    </ul>
+
+<pre><code>it('thrown errors from "use cache" have a sourcemapped stack with a codeframe', async () =&gt; {
+  if (isNextDev) {
+    await next.render('/rsc-error-throw-cached')
+    // … wait for Error: rsc-error-throw-cached …
+    expect(cliOutput).toContain(
+      'Error: rsc-error-throw-cached' +
+        '\n    at throwsInCache (app/rsc-error-throw-cached/page.js:5:9)' +
+        // … codeframe …
+    )
+    expect(cliOutput).toContain("environmentName: 'Cache'")
+  } else {
+    // prod: no leak of virtual URLs
+    expect(normalizeCliOutput(/* … */)).not.toContain('about://React/')
+  }
+})</code></pre>
+
+    <div class="callout ok">
+      <div class="label">What this would have caught in #95936</div>
+      <p style="margin:0">
+        Broken runs showed frames like
+        <code>at throwsInCache (file:/private/var/…)</code> or
+        <code>../</code>-prefixed paths — substring checks on the message alone
+        would still pass.
+      </p>
+    </div>
+
+    <h3>3.3 Restore a previously weakened assertion</h3>
+
+    <p>
+      In <code>cache-components-dev-errors.test.ts</code>, a blocking-route
+      validation error used to assert the full CLI stack + codeframe. That was
+      reduced to a docs-link / message check in an earlier commit. This PR puts
+      the stack assertion back:
+    </p>
+
+<pre><code>expect(stripAnsi(next.cliOutput.slice(outputIndex))).toContain(
+  '\n    at Page (app/no-accessed-data/page.js:2:9)' +
+    '\n  1 | export default async function Page() {' +
+    '\n&gt; 2 |   await new Promise((r) =&gt; setTimeout(r, 200))' +
+    '\n    |         ^' +
+    '\n  3 |   return &lt;p&gt;Page&lt;/p&gt;' +
+    '\n  4 | }'
+)</code></pre>
+
+    <p>
+      Those stacks flow through <em>Prerender</em>-environment fake frames. When
+      symbolication broke, frames leaked bracket-encoded chunk names and raw
+      <code>about://React/…%5Broot-of-the-server%5D…</code> URLs.
+    </p>
+
+    <h3>3.4 The new CDP test — act like a debugger</h3>
+
+    <p>
+      File: <code>fake-frame-source-maps.test.ts</code> (~349 lines). This is the
+      novel piece. It starts the app with the first-class
+      <code>--inspect=0</code> flag (works for both <code>next dev</code> and
+      <code>next start</code>), finds the server’s inspector WebSocket, and
+      speaks Chrome DevTools Protocol.
+    </p>
+
+    <div class="diagram">
+      <h4>Flow · CDP test (dev path)</h4>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div>
+            <strong>Boot with <code>startArgs: ['--inspect=0']</code></strong>
+            <span>Node prints <code>Debugger listening on ws://127.0.0.1:&lt;port&gt;/</code></span>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div>
+            <strong>Render <code>/rsc-error-log</code></strong>
+            <span>React materializes fake frame scripts for Server Component debug info</span>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">3</div>
+          <div>
+            <strong><code>Debugger.enable</code></strong>
+            <span>Collect every <code>scriptParsed</code> whose URL starts with <code>about://React/</code></span>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">4</div>
+          <div>
+            <strong><code>resolveSourceMapLikeADebugger</code></strong>
+            <span>
+              <code>data:</code> → decode base64 ·
+              relative/<code>file:</code> → read disk ·
+              <code>http(s):</code> → <code>Network.loadNetworkResource</code> through the target
+            </span>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">5</div>
+          <div>
+            <strong>Map the padded <code>_()</code> call</strong>
+            <span>Use Node’s <code>SourceMap</code> class; assert a well-formed source that includes the fixture page</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      Why load http(s) maps <em>through the debugged target</em>? Because the
+      dedicated Chrome DevTools frontend for Node targets does not freely fetch
+      arbitrary remote URLs itself. Reproducing that constraint is the point —
+      when #95936 broke network resource loading, the failure message matched
+      what a human debugger saw:
+      <em>“Unable to load source map through the debugged target”</em> /
+      <em>“Network resource loading is not enabled…”</em>.
+    </p>
+
+    <p>
+      The prod branch of the same file is slightly different: instead of mapping
+      fake <code>about://React/</code> scripts, it asserts that
+      <code>.next/server/…</code> chunk scripts declare resolvable source maps,
+      and that the rendered page’s original source appears in
+      <code>sources</code> (exact match differs for Turbopack vs webpack).
+    </p>
+
+    <div class="callout def">
+      <div class="label">Well-formedness guard</div>
+      <p style="margin:0">
+        <code>expectWellFormedSource</code> requires sources to match
+        <code>/^(file:\/\/\/|turbopack:\/\/|webpack:\/\/)/</code>. That catches
+        mangled concatenations like <code>file:/cwd-relative/path</code> which
+        naïve substring assertions would miss.
+      </p>
+    </div>
+
+    <h3>3.5 How the pieces fit together</h3>
+
+    <ul class="clean">
+      <li><strong>Fixture</strong> creates the hard case (cache → Flight → revive).</li>
+      <li><strong>CLI assertion</strong> locks the developer-facing terminal contract.</li>
+      <li><strong>Restored validation assertion</strong> covers Prerender-environment fake frames.</li>
+      <li><strong>CDP harness</strong> locks the debugger-facing contract that humans hit manually.</li>
+    </ul>
+
+    <p>
+      Together they answer the question #95936 left open: “If we break fake-frame
+      source maps again, will CI fail for the same reason a debugger fails?”
+      Yes.
+    </p>
+  </section>
+
+  <!-- ========== QUIZ ========== -->
+  <section id="quiz">
+    <h2>4. Quiz</h2>
+    <p>
+      Five medium questions. Click an answer to reveal feedback. You need the
+      substance of the PR — not trivia from commit messages — to score well.
+    </p>
+
+    <div class="quiz-card" data-quiz="1" data-answer="b">
+      <h4>1. Why did #95936’s breakage slip past CI?</h4>
+      <div class="options">
+        <button type="button" data-choice="a">The PR never ran the server-source-maps suite.</button>
+        <button type="button" data-choice="b">Existing tests mostly checked error messages, not that fake-frame source maps stayed resolvable or that stacks stayed symbolicated.</button>
+        <button type="button" data-choice="c">Source maps are disabled in CI by default.</button>
+        <button type="button" data-choice="d">Turbopack and webpack use different Flight protocols, so only one bundler was covered.</button>
+      </div>
+      <div class="feedback" hidden></div>
+    </div>
+
+    <div class="quiz-card" data-quiz="2" data-answer="c">
+      <h4>2. When an error is thrown inside <code>"use cache"</code>, which stack does the CLI typically print in dev?</h4>
+      <div class="options">
+        <button type="button" data-choice="a">The original V8 stack from the cache worker, unchanged.</button>
+        <button type="button" data-choice="b">A browser stack reconstructed by the Redbox overlay only.</button>
+        <button type="button" data-choice="c">A stack rebuilt via fake frames when the Flight client revives the error (<code>resolveErrorDev</code>), with <code>environmentName: 'Cache'</code>.</button>
+        <button type="button" data-choice="d">No stack at all — cache errors are message-only digests.</button>
+      </div>
+      <div class="feedback" hidden></div>
+    </div>
+
+    <div class="quiz-card" data-quiz="3" data-answer="a">
+      <h4>3. In the CDP test, why are <code>http(s)</code> source maps loaded with <code>Network.loadNetworkResource</code> instead of a plain <code>fetch</code> from the test process?</h4>
+      <div class="options">
+        <button type="button" data-choice="a">To mimic debugger frontends that cannot freely fetch arbitrary URLs and must load maps through the debugged target.</button>
+        <button type="button" data-choice="b">Because Node’s <code>fetch</code> cannot parse source map JSON.</button>
+        <button type="button" data-choice="c">Because CDP forbids outbound network from the test runner.</button>
+        <button type="button" data-choice="d">Because <code>data:</code> URLs are illegal in Node inspector sessions.</button>
+      </div>
+      <div class="feedback" hidden></div>
+    </div>
+
+    <div class="quiz-card" data-quiz="4" data-answer="d">
+      <h4>4. What does the production (<code>next start</code>) half of the <code>use cache</code> test primarily guard?</h4>
+      <div class="options">
+        <button type="button" data-choice="a">That every frame maps to an exact <code>file:///</code> URL under the test directory.</button>
+        <button type="button" data-choice="b">That Redbox shows a codeframe identical to dev.</button>
+        <button type="button" data-choice="c">That <code>--inspect=0</code> is rejected in production.</button>
+        <button type="button" data-choice="d">That logged stacks do not leak virtual <code>about://React/</code> URLs, even though runtime stacks are not fully sourcemapped.</button>
+      </div>
+      <div class="feedback" hidden></div>
+    </div>
+
+    <div class="quiz-card" data-quiz="5" data-answer="b">
+      <h4>5. The restored assertion in <code>cache-components-dev-errors.test.ts</code> covers which fake-frame environment?</h4>
+      <div class="options">
+        <button type="button" data-choice="a">Only the <code>Cache</code> environment from <code>"use cache"</code>.</button>
+        <button type="button" data-choice="b">Prerender-environment fake frames for blocking-route validation errors (with a symbolicated stack + codeframe).</button>
+        <button type="button" data-choice="c">Edge runtime middleware stacks exclusively.</button>
+        <button type="button" data-choice="d">Client-only hydration mismatch stacks.</button>
+      </div>
+      <div class="feedback" hidden></div>
+    </div>
+
+    <div class="score" id="score">Score: 0 / 5 answered correctly</div>
+  </section>
+
+  <footer>
+    <p>
+      Source:
+      <a href="https://github.com/vercel/next.js/pull/95945">vercel/next.js#95945</a>
+      · Related breakage discussion:
+      <a href="https://github.com/vercel/next.js/pull/95936">#95936</a>
+      · Follow-up draft:
+      <a href="https://github.com/vercel/next.js/pull/96037">#96037</a>
+    </p>
+    <p>Generated as a self-contained explain-diff page · 2026-07-22</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const explanations = {
+    "1": {
+      b: "Exactly. Message-only checks stayed green while debugger-facing source maps and symbolicated stacks broke.",
+      a: "The suite ran; it just did not assert the broken property.",
+      c: "CI does exercise source-map related tests; the gap was assertion strength, not disabled maps.",
+      d: "Bundler differences exist, but the miss was about what was asserted, not which bundler ran."
+    },
+    "2": {
+      c: "Correct. The logged error is revived across Flight; fake frames rebuild the stack and stamp environmentName: 'Cache'.",
+      a: "The original cache-realm stack is not what consumers print after revival.",
+      b: "Redbox is separate; this PR’s CLI assertions target server terminal output.",
+      d: "Digests exist in some prod paths, but this fixture asserts a real Error with stack behavior."
+    },
+    "3": {
+      a: "Right — matching the Node DevTools frontend constraint is how the test caught the same failure humans saw.",
+      b: "fetch can parse JSON fine; the constraint is about where the bytes are loaded from.",
+      c: "The test runner can use network; the point is simulating the debugger’s capabilities.",
+      d: "data: maps are supported and decoded directly in the helper."
+    },
+    "4": {
+      d: "Yes. Prod does not require full sourcemapped stacks, but virtual about://React/ URLs must not leak.",
+      a: "That exact file:// match is a dev CDP assertion.",
+      b: "Redbox parity is not what the prod branch of this test checks.",
+      c: "The test deliberately starts with --inspect=0 in both modes."
+    },
+    "5": {
+      b: "Correct — blocking-route validation stacks go through Prerender-environment fake frames.",
+      a: "Cache-environment coverage is the rsc-error-throw-cached test.",
+      c: "This file is about cache-components dev errors on Node, not edge middleware.",
+      d: "Hydration mismatches are a different error path."
+    }
+  };
+
+  let correctCount = 0;
+  const answered = new Set();
+  const scoreEl = document.getElementById("score");
+
+  document.querySelectorAll(".quiz-card").forEach((card) => {
+    const id = card.getAttribute("data-quiz");
+    const answer = card.getAttribute("data-answer");
+    const feedback = card.querySelector(".feedback");
+    const buttons = card.querySelectorAll("button");
+
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (answered.has(id)) return;
+        answered.add(id);
+        const choice = btn.getAttribute("data-choice");
+        const ok = choice === answer;
+        buttons.forEach((b) => {
+          b.disabled = true;
+          if (b.getAttribute("data-choice") === answer) b.classList.add("correct");
+        });
+        if (!ok) btn.classList.add("incorrect");
+        feedback.hidden = false;
+        feedback.classList.add("show", ok ? "ok" : "bad");
+        feedback.textContent = (ok ? "Correct. " : "Not quite. ") + explanations[id][choice];
+        if (ok) correctCount += 1;
+        scoreEl.textContent = "Score: " + correctCount + " / " + answered.size + " answered correctly" +
+          (answered.size === 5 ? " (done)" : "");
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
