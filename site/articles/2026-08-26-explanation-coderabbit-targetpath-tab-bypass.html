@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="ログイン後の戻り先検査がタブ文字をすり抜けた理由と、CodeRabbit の提案を却下しつつ共通関数側で直した PR #4231 の解説。" />
+<meta name="archive:title" content="タブ 1 文字で検問を抜ける —— CodeRabbit の指摘は何が問題だったのか" />
+<meta name="archive:published" content="2026-08-26" />
+<meta name="archive:type" content="Explain Diff" />
+<meta name="archive:source" content="zumen-fe · #4231" />
+<meta name="archive:category" content="Security" />
+<meta name="archive:category" content="Auth" />
+<meta name="archive:category" content="CodeRabbit" />
+<meta name="archive:category" content="TypeScript" />
+<meta name="archive:reading-minutes" content="15" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="checkIsInAppPath('/⇥/evil') // true before guard" />
+<title>PR #4231 解説 — CodeRabbit が見つけたタブ文字のすり抜け</title>
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --surface: #ffffff;
+    --ink: #1c1b19;
+    --ink-soft: #55524d;
+    --line: #e3ded6;
+    --accent: #1976d2;
+    --accent-soft: #e9f4ff;
+    --danger: #c0392b;
+    --danger-soft: #fdedeb;
+    --ok: #1e7d44;
+    --ok-soft: #e8f6ed;
+    --warn: #b8860b;
+    --warn-soft: #fdf6e3;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.85;
+    font-size: 16px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+  header.hero {
+    background: linear-gradient(160deg, #14283d, #1976d2);
+    color: #fff;
+    padding: 56px 0 44px;
+  }
+  header.hero .wrap { max-width: 1180px; }
+  header.hero .eyebrow {
+    font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    opacity: .8; margin-bottom: 10px;
+  }
+  header.hero h1 { margin: 0 0 14px; font-size: 34px; line-height: 1.35; }
+  header.hero p { margin: 0; max-width: 760px; opacity: .93; font-size: 17px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .chip {
+    background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.28);
+    padding: 5px 12px; border-radius: 999px; font-size: 13px;
+    font-family: var(--mono);
+  }
+  .layout { display: grid; grid-template-columns: 250px 1fr; gap: 44px; padding: 44px 0 90px; }
+  nav.toc { position: sticky; top: 20px; align-self: start; font-size: 14px; }
+  nav.toc h2 { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 12px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+  nav.toc li { counter-increment: toc; margin-bottom: 3px; }
+  nav.toc a {
+    display: block; padding: 7px 10px; color: var(--ink-soft);
+    text-decoration: none; border-radius: 7px; border-left: 3px solid transparent;
+  }
+  nav.toc a::before { content: counter(toc) ". "; opacity: .5; }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); }
+  nav.toc li.sub { counter-increment: none; padding-left: 18px; font-size: 13px; }
+  nav.toc .sub a::before { content: "— "; }
+  main { min-width: 0; }
+  section { margin-bottom: 68px; scroll-margin-top: 20px; }
+  h2.section-title {
+    font-size: 27px; margin: 0 0 8px; padding-bottom: 12px;
+    border-bottom: 2px solid var(--line);
+  }
+  .section-lead { color: var(--ink-soft); margin: 0 0 30px; font-size: 16px; }
+  h3 { font-size: 20px; margin: 38px 0 12px; }
+  h4 { font-size: 16px; margin: 26px 0 10px; color: var(--ink-soft); }
+  p { margin: 0 0 17px; }
+  code.inl {
+    font-family: var(--mono); font-size: .88em; background: #f0ede8;
+    padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line);
+    word-break: break-word;
+  }
+  pre {
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.7;
+    background: #1e2430; color: #e6e9ef; padding: 18px 20px;
+    border-radius: 10px; overflow-x: auto; white-space: pre; margin: 0 0 20px;
+  }
+  pre.diff .add { color: #7ee2a8; display: block; }
+  pre.diff .del { color: #ff9d95; display: block; }
+  pre.diff .ctx { color: #9aa4b4; display: block; }
+  pre .cm { color: #8b98ab; }
+  pre .kw { color: #c792ea; }
+  pre .st { color: #ecc48d; }
+  pre .fn { color: #82aaff; }
+  .callout {
+    border-left: 4px solid var(--accent); background: var(--accent-soft);
+    padding: 15px 19px; border-radius: 0 9px 9px 0; margin: 0 0 22px;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.danger { border-left-color: var(--danger); background: var(--danger-soft); }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout .label {
+    font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; display: block; margin-bottom: 6px; color: var(--accent);
+  }
+  .callout.warn .label { color: var(--warn); }
+  .callout.danger .label { color: var(--danger); }
+  .callout.ok .label { color: var(--ok); }
+  .callout p:last-child { margin-bottom: 0; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 22px 24px; margin: 0 0 24px;
+  }
+  .card > h4:first-child { margin-top: 0; }
+  .skippable {
+    background: #f4f2ee; border: 1px dashed var(--line);
+    border-radius: 10px; padding: 4px 20px; margin-bottom: 24px;
+  }
+  .skippable > summary {
+    cursor: pointer; font-weight: 600; padding: 13px 0; color: var(--ink-soft);
+    list-style: none; font-size: 15px;
+  }
+  .skippable > summary::-webkit-details-marker { display: none; }
+  .skippable > summary::before { content: "▸ "; color: var(--accent); }
+  .skippable[open] > summary::before { content: "▾ "; }
+
+  /* ── Diagram: character boxes ───────────────────── */
+  .charstrip { margin: 0 0 8px; }
+  .charstrip .cs-label {
+    font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; font-weight: 600;
+  }
+  .cs-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: stretch; }
+  .cs-box {
+    min-width: 30px; padding: 7px 4px; text-align: center;
+    font-family: var(--mono); font-size: 14px;
+    background: #fff; border: 1.5px solid var(--line); border-radius: 5px;
+  }
+  .cs-box.tab { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); font-size: 11px; font-weight: 700; }
+  .cs-box.slash { background: var(--warn-soft); border-color: var(--warn); color: #8a6508; font-weight: 700; }
+  .cs-box.gone { background: #f0ede8; border-style: dashed; color: #b9b3aa; text-decoration: line-through; }
+  .cs-box.hit { background: var(--accent-soft); border-color: var(--accent); }
+  .cs-arrow { text-align: center; color: var(--ink-soft); font-size: 20px; margin: 8px 0; }
+  .cs-note { font-size: 13px; color: var(--ink-soft); margin-top: 7px; }
+
+  /* ── Diagram: two parsers ───────────────────────── */
+  .twoview { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 0 22px; }
+  .twoview .pane { border: 1.5px solid var(--line); border-radius: 11px; padding: 16px 18px; background: #fff; }
+  .twoview .pane.ours { border-color: var(--accent); }
+  .twoview .pane.browser { border-color: var(--danger); }
+  .twoview .pane h5 {
+    margin: 0 0 12px; font-size: 13px; letter-spacing: .05em; text-transform: uppercase;
+  }
+  .twoview .pane.ours h5 { color: var(--accent); }
+  .twoview .pane.browser h5 { color: var(--danger); }
+  .verdict { margin-top: 12px; font-weight: 700; font-size: 15px; }
+  .verdict.pass { color: var(--ok); }
+  .verdict.fail { color: var(--danger); }
+
+  /* ── Diagram: gates ─────────────────────────────── */
+  .gates { margin: 0 0 22px; }
+  .gate-title { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin-bottom: 10px; }
+  .gate-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .gate-node {
+    border: 1.5px solid var(--line); background: #fff; border-radius: 9px;
+    padding: 10px 13px; font-size: 13px; min-width: 96px; text-align: center;
+  }
+  .gate-node .gn-title { font-weight: 700; font-size: 12.5px; display: block; }
+  .gate-node .gn-sub { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); display: block; margin-top: 3px; word-break: break-all; }
+  .gate-node.start { background: #f4f2ee; }
+  .gate-node.pass { border-color: var(--ok); background: var(--ok-soft); }
+  .gate-node.block { border-color: var(--danger); background: var(--danger-soft); }
+  .gate-node.missing { border-style: dashed; border-color: #cbc5bb; color: #a49e94; background: #faf9f7; }
+  .gate-node.dest-good { border-color: var(--ok); background: var(--ok-soft); font-weight: 700; }
+  .gate-node.dest-bad { border-color: var(--danger); background: var(--danger-soft); font-weight: 700; }
+  .gate-arrow { color: #b0a99e; font-size: 19px; flex-shrink: 0; }
+
+  /* ── Diagram: lifecycle ─────────────────────────── */
+  .lifecycle { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: center; margin: 0 0 20px; }
+  .lc-box { border: 1.5px solid var(--line); border-radius: 11px; padding: 15px; background: #fff; text-align: center; }
+  .lc-box .lc-h { font-weight: 700; font-size: 14px; display: block; margin-bottom: 6px; }
+  .lc-box .lc-b { font-size: 12.5px; color: var(--ink-soft); }
+  .lc-box.store { border-color: var(--warn); background: var(--warn-soft); }
+  .lc-box.consume { border-color: var(--accent); background: var(--accent-soft); }
+  .lc-arrow { color: #b0a99e; font-size: 20px; text-align: center; }
+
+  table.data {
+    width: 100%; border-collapse: collapse; font-size: 14px; margin: 0 0 22px;
+    background: #fff; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  table.data th, table.data td { padding: 10px 13px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.data th { background: #f4f2ee; font-size: 12.5px; letter-spacing: .03em; }
+  table.data tr:last-child td { border-bottom: none; }
+  table.data td.mono { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+  table.data tr.bad td { background: var(--danger-soft); }
+  table.data tr.good td { background: var(--ok-soft); }
+  .tag { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
+  .tag.ok { background: var(--ok-soft); color: var(--ok); border: 1px solid #a9d9bd; }
+  .tag.ng { background: var(--danger-soft); color: var(--danger); border: 1px solid #eeb3ac; }
+
+  ul.clean { padding-left: 22px; margin: 0 0 18px; }
+  ul.clean li { margin-bottom: 8px; }
+
+  /* ── Quiz ───────────────────────────────────────── */
+  .quiz-item {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px 24px; margin-bottom: 20px;
+  }
+  .quiz-item .qnum {
+    font-size: 12px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 7px;
+  }
+  .quiz-item .qtext { font-weight: 600; margin-bottom: 15px; font-size: 16.5px; }
+  .qopt {
+    display: block; width: 100%; text-align: left; background: #faf9f7;
+    border: 1.5px solid var(--line); border-radius: 8px; padding: 12px 15px;
+    margin-bottom: 9px; cursor: pointer; font-size: 14.5px; line-height: 1.6;
+    font-family: inherit; color: var(--ink); transition: all .12s;
+  }
+  .qopt:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  .qopt:disabled { cursor: default; }
+  .qopt.correct { border-color: var(--ok); background: var(--ok-soft); }
+  .qopt.wrong { border-color: var(--danger); background: var(--danger-soft); }
+  .qopt .mark { font-weight: 700; margin-right: 7px; }
+  .qfb {
+    margin-top: 13px; padding: 13px 16px; border-radius: 8px;
+    font-size: 14.5px; display: none;
+  }
+  .qfb.show { display: block; }
+  .qfb.right { background: var(--ok-soft); border-left: 4px solid var(--ok); }
+  .qfb.nope { background: var(--warn-soft); border-left: 4px solid var(--warn); }
+  #score {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 22px; font-size: 15.5px; font-weight: 600;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; gap: 0; padding-top: 24px; }
+    nav.toc { position: static; margin-bottom: 34px; border: 1px solid var(--line); border-radius: 11px; padding: 16px; background: #fff; }
+    .twoview { grid-template-columns: 1fr; }
+    .lifecycle { grid-template-columns: 1fr; }
+    .lc-arrow { transform: rotate(90deg); }
+    header.hero h1 { font-size: 26px; }
+    header.hero { padding: 38px 0 30px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">zumen-fe · Pull Request #4231</div>
+    <h1>タブ 1 文字で検問を抜ける ——<br>CodeRabbit の指摘は何が問題だったのか</h1>
+    <p>
+      ログイン後の戻り先を検査していた正規表現は、正しく書かれているように見えた。だが検査していた文字列と、
+      ブラウザが実際に飛び先として使う文字列は、同じものではなかった。その 1 文字の差を追いかける。
+    </p>
+    <div class="meta-row">
+      <span class="chip">3 commits</span>
+      <span class="chip">3 files</span>
+      <span class="chip">checkIsInAppPath</span>
+      <span class="chip">U+0009 / U+000A / U+000D</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<nav class="toc">
+  <h2>目次</h2>
+  <ol>
+    <li><a href="#background">背景</a></li>
+    <li class="sub"><a href="#bg-deep">戻り先という仕組み</a></li>
+    <li class="sub"><a href="#bg-incident">招待 URL 事件</a></li>
+    <li class="sub"><a href="#bg-thispr">この PR の出発点</a></li>
+    <li><a href="#intuition">核心</a></li>
+    <li class="sub"><a href="#in-two-parsers">2 人の読み手</a></li>
+    <li class="sub"><a href="#in-damage">2 つの被害</a></li>
+    <li class="sub"><a href="#in-where">どこを直すか</a></li>
+    <li class="sub"><a href="#in-reach">到達可能性</a></li>
+    <li><a href="#code">コード解説</a></li>
+    <li><a href="#epilogue">後日談</a></li>
+    <li><a href="#quiz">理解度クイズ</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ═══════════════ BACKGROUND ═══════════════ -->
+<section id="background">
+  <h2 class="section-title">背景</h2>
+  <p class="section-lead">
+    この PR を理解するには、まず「ログイン後の戻り先」という、どのアプリにもありそうで、
+    しかし驚くほど事故を起こしやすい仕組みを知る必要がある。
+  </p>
+
+  <details class="skippable" id="bg-deep">
+    <summary>深い背景 — 「ログイン後の戻り先」とは何か（この分野に馴染みがあれば飛ばして構わない）</summary>
+
+    <p>
+      あなたが同僚から図面のリンクを受け取ったとしよう。<code class="inl">https://zume-n.com/drawings/80000</code> をクリックする。
+      しかしログインしていないので、アプリはあなたをログイン画面へ送る。ログインを終えたあと、
+      どこへ着地すべきだろうか。
+    </p>
+    <p>
+      トップページに放り出されたら、あなたはもう一度リンクを探しにメールへ戻ることになる。
+      親切なアプリは「あなたが本当は <code class="inl">/drawings/80000</code> を見たかった」ことを覚えておき、
+      ログイン後にそこへ連れて行く。この「覚えておく値」を、このアプリでは
+      <code class="inl">targetPath</code> と呼び、ブラウザの localStorage に保存している。
+    </p>
+
+    <div class="lifecycle">
+      <div class="lc-box store">
+        <span class="lc-h">① 保存</span>
+        <span class="lc-b">ログインが必要な画面に未ログインで来た時、その URL を書き込む</span>
+      </div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-box">
+        <span class="lc-h">② 保管</span>
+        <span class="lc-b">localStorage に残る。<strong>ログアウトしても消えない</strong>設定になっている</span>
+      </div>
+      <div class="lc-arrow">→</div>
+      <div class="lc-box consume">
+        <span class="lc-h">③ 消費</span>
+        <span class="lc-b">ログイン成功後に読み出し、そこへ遷移して、値を削除する</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">用語</span>
+      <p>
+        <strong>消費地点</strong>とは、③ の「読んで・使って・消す」場所のこと。切符と同じで、一度使えば無くなる。
+        本文では「保存地点」（①）と対にして使う。
+      </p>
+    </div>
+
+    <p>
+      さて、ここに落とし穴がある。localStorage は<strong>ブラウザの持ち主なら誰でも書き換えられる</strong>し、
+      ①の保存はユーザーが開いた URL をそのまま写し取る。つまり
+      <code class="inl">targetPath</code> の中身は、アプリから見れば<strong>信用できない外部入力</strong>だ。
+      そして③で、その値を使って遷移する。信用できない値で遷移する——これは
+      <strong>オープンリダイレクト</strong>という古典的な脆弱性の型そのものである。
+    </p>
+    <p>
+      典型的な攻撃は、値を <code class="inl">//evil.example</code> にすることだ。先頭が <code class="inl">/</code> なので
+      「サイト内の絶対パス」に見える。ところがスラッシュ 2 つで始まる URL は
+      <strong>プロトコル相対 URL</strong> と呼ばれ、ブラウザは「今と同じ http/https で、<em>evil.example という別のサイト</em>へ」
+      と解釈する。ログインした直後の、最も警戒心が緩んだ瞬間に見知らぬサイトへ飛ばされることになる。
+    </p>
+    <p>
+      だから③の手前には検問がある。それがこの PR の主役、<code class="inl">checkIsInAppPath</code> という関数だ。
+    </p>
+  </details>
+
+  <h3 id="bg-incident">直接の背景 ① — 招待 URL が顧客のログインを乗っ取った事件</h3>
+  <p>
+    2026 年 8 月、本番環境で実際の障害が起きた。社内向け Google SSO の招待メールのリンク——
+    <code class="inl">/admin/login?invitation=...</code>——を一度開いたブラウザで、後日まったく別の顧客アカウントに
+    パスワードでログインすると、企業選択のあとで<strong>その招待 URL へ飛ばされ</strong>、
+    ログイン画面との間を無限に往復するというものだった。
+  </p>
+  <p>
+    原因は、招待 URL が <code class="inl">targetPath</code> に保存され、ログアウトを生き延び、
+    後日の別人のログインで消費されたことにあった。修正は 2 段構えで行われた。
+  </p>
+
+  <div class="card">
+    <h4>hotfix #4215 の 2 段構え</h4>
+    <ul class="clean">
+      <li><strong>予防（保存地点）</strong>: 除外リストに <code class="inl">/^\/admin\//</code> を足し、招待 URL をそもそも保存させない。</li>
+      <li><strong>治療（消費地点）</strong>: <em>同じ</em>除外判定を消費地点でも使い、すでに汚染済みのブラウザが次のログインで自力回復できるようにする。</li>
+    </ul>
+    <p style="margin-bottom:0">
+      このとき明確に決められた原則がある——<strong>「消費側に別の判定を書かないこと」</strong>。
+      判定が 2 系統になると、次に画面が増えたとき片方だけを更新して、もう片方が腐るからだ。
+      この原則は、後で CodeRabbit の提案を却下する根拠になる。
+    </p>
+  </div>
+
+  <h3 id="bg-thispr">直接の背景 ② — 移設で片方だけが落ちた</h3>
+  <p>
+    ところがこの hotfix は <code class="inl">stg</code> ブランチ上で作られ、開発中の <code class="inl">dev</code> ブランチには
+    別途取り込む必要があった。そして <code class="inl">dev</code> では、ちょうど SSO ph2 の作業で
+    <code class="inl">src/functions/targetPath.ts</code> が <code class="inl">src/libs/auth0/targetPath.ts</code> へ<strong>移設されていた</strong>。
+    さらに消費地点そのものも、別のコンポーネントへ引っ越していた。
+  </p>
+  <p>
+    結果として dev に取り込まれたのは<strong>予防（保存側）だけ</strong>で、治療（消費側）が落ちた。
+    それを埋め直すのが、この PR #4231 の当初の目的である。
+  </p>
+
+  <div class="gates">
+    <div class="gate-title">この PR を出した時点の消費地点（dev）</div>
+    <div class="gate-flow">
+      <div class="gate-node start"><span class="gn-title">targetPath</span><span class="gn-sub">localStorage から読む</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node pass"><span class="gn-title">checkIsInAppPath</span><span class="gn-sub">別サイトを弾く</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node missing"><span class="gn-title">checkIsExcludedPath</span><span class="gn-sub">← これが無かった</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node"><span class="gn-title">遷移</span></div>
+    </div>
+  </div>
+
+  <p>
+    PR #4231 はこの欠けた検問を足し、ついでに三項演算子の連なりを <code class="inl">ts-pattern</code> の
+    <code class="inl">match</code> に書き換えた。ここまでは、平和な PR だった。
+    そこへ CodeRabbit がやってくる。
+  </p>
+</section>
+
+<!-- ═══════════════ INTUITION ═══════════════ -->
+<section id="intuition">
+  <h2 class="section-title">核心 — 検問は、通る本人を見ていなかった</h2>
+  <p class="section-lead">
+    CodeRabbit の指摘を一言でいえばこうだ。<strong>私たちが検査した文字列と、ブラウザが遷移先として使う文字列が、
+    別物だった。</strong>
+  </p>
+
+  <h3 id="in-two-parsers">2 人の読み手が、同じ紙を違うように読む</h3>
+  <p>
+    検問の実装はこうだった。「先頭が <code class="inl">/</code> で、2 文字目が <code class="inl">/</code> でも
+    <code class="inl">\</code> でもなければ、サイト内のパスと認める」。
+  </p>
+
+<pre><span class="kw">export const</span> <span class="fn">checkIsInAppPath</span> = (path: <span class="kw">string</span>): <span class="kw">boolean</span> =&gt;
+  /^\/[^\/\\]/.<span class="fn">test</span>(path);</pre>
+
+  <p>
+    <code class="inl">//evil.example</code> は 2 文字目が <code class="inl">/</code> なので弾かれる。
+    <code class="inl">/\evil.example</code> も 2 文字目が <code class="inl">\</code> なので弾かれる
+    （ブラウザは <code class="inl">\</code> を <code class="inl">/</code> に直すため、これも別サイト行きだ）。
+    一見、隙がない。
+  </p>
+  <p>
+    ではここに、<strong>タブ文字を 1 つ挟んだら</strong>どうなるか。
+  </p>
+
+  <div class="twoview">
+    <div class="pane ours">
+      <h5>私たちの正規表現の読み方</h5>
+      <div class="charstrip">
+        <div class="cs-label">検査対象の文字列</div>
+        <div class="cs-row">
+          <div class="cs-box slash">/</div>
+          <div class="cs-box tab">TAB</div>
+          <div class="cs-box slash">/</div>
+          <div class="cs-box">e</div>
+          <div class="cs-box">v</div>
+          <div class="cs-box">i</div>
+          <div class="cs-box">l</div>
+          <div class="cs-box">.</div>
+          <div class="cs-box">…</div>
+        </div>
+        <div class="cs-note">
+          1 文字目 = <code class="inl">/</code> ✓ ／ 2 文字目 = タブ。<code class="inl">/</code> でも <code class="inl">\</code> でもない ✓
+        </div>
+      </div>
+      <div class="verdict pass">→ 「サイト内のパスだ」と判定して通す</div>
+    </div>
+    <div class="pane browser">
+      <h5>ブラウザの読み方</h5>
+      <div class="charstrip">
+        <div class="cs-label">URL 解析の第一手：タブと改行を全部消す</div>
+        <div class="cs-row">
+          <div class="cs-box slash">/</div>
+          <div class="cs-box gone">TAB</div>
+          <div class="cs-box slash">/</div>
+          <div class="cs-box">e</div>
+          <div class="cs-box">v</div>
+          <div class="cs-box">i</div>
+          <div class="cs-box">l</div>
+          <div class="cs-box">.</div>
+          <div class="cs-box">…</div>
+        </div>
+        <div class="cs-note">
+          残った文字列は <code class="inl">//evil.example</code> = プロトコル相対 URL
+        </div>
+      </div>
+      <div class="verdict fail">→ 別サイト https://evil.example へ遷移</div>
+    </div>
+  </div>
+
+  <div class="callout danger">
+    <span class="label">これが問題の正体</span>
+    <p>
+      検問は「タブを含んだ生の文字列」を見て合格を出した。しかし遷移に使われるのは
+      「ブラウザがタブを取り除いたあとの文字列」だ。<strong>審査した書類と、実際に提出された書類が違う。</strong>
+      検問が甘かったのではなく、<em>検問が見ていた対象が間違っていた</em>。
+    </p>
+  </div>
+
+  <p>
+    これは URL 標準（WHATWG URL）の仕様どおりの挙動である。URL を解析する最初の手順が
+    「入力からすべての ASCII タブと改行を取り除く」と決まっている。位置は問わない——先頭でも、真ん中でもだ。
+    実際に Node.js の URL 実装で、先頭 <code class="inl">/</code> の直後に制御文字を 1 つずつ入れて確かめると、
+    行き先のサイト（origin）が変わってしまうのは次の 3 文字だけだった。
+  </p>
+
+  <div class="card">
+    <h4>origin を書き換えられる文字（実測）</h4>
+    <table class="data" style="margin-bottom:0">
+      <tr><th>文字</th><th>名前</th><th>エスケープ表記</th></tr>
+      <tr class="bad"><td class="mono">U+0009</td><td>水平タブ</td><td class="mono">\t</td></tr>
+      <tr class="bad"><td class="mono">U+000A</td><td>改行（LF）</td><td class="mono">\n</td></tr>
+      <tr class="bad"><td class="mono">U+000D</td><td>復帰（CR）</td><td class="mono">\r</td></tr>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">紛らわしい隣人</span>
+    <p>
+      同じタブでも、<strong>パーセント符号化された <code class="inl">%09</code> は取り除かれない</strong>。
+      <code class="inl">/%09/evil.example</code> は最後まで自サイトのパスのままで、危険はない。
+      「生のタブ」と「符号化されたタブ」はまったく別物である——この違いは後のクイズにも出てくる。
+    </p>
+  </div>
+
+  <h3 id="in-damage">2 つの被害</h3>
+  <p>
+    タブ 1 文字ですり抜けられるのは、外部サイトへの遷移だけではなかった。
+    <strong>もう一方の検問（除外パス判定）も同じ理由で無力化される。</strong>
+  </p>
+
+  <div class="gates">
+    <div class="gate-title">被害 A — 外部サイトへ飛ばされる</div>
+    <div class="gate-flow">
+      <div class="gate-node start"><span class="gn-title">仕込まれた値</span><span class="gn-sub">/⇥/evil.example</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node pass"><span class="gn-title">checkIsInAppPath</span><span class="gn-sub">2文字目がタブ → 通過</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node pass"><span class="gn-title">checkIsExcludedPath</span><span class="gn-sub">該当なし → 通過</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node dest-bad"><span class="gn-title">evil.example</span><span class="gn-sub">別サイト</span></div>
+    </div>
+  </div>
+
+  <div class="gates">
+    <div class="gate-title">被害 B — 招待 URL 事件の再来（除外リストの回避）</div>
+    <div class="gate-flow">
+      <div class="gate-node start"><span class="gn-title">仕込まれた値</span><span class="gn-sub">/⇥admin/login?invitation=…</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node pass"><span class="gn-title">checkIsInAppPath</span><span class="gn-sub">2文字目がタブ → 通過</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node pass"><span class="gn-title">checkIsExcludedPath</span><span class="gn-sub">/^\/admin\// に一致せず → 通過</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node dest-bad"><span class="gn-title">/admin/login</span><span class="gn-sub">社内ログインが始まる</span></div>
+    </div>
+  </div>
+
+  <p>
+    被害 B が痛烈なのは、<strong>これがまさに #4215 で塞いだはずの穴だから</strong>だ。
+    除外リストは <code class="inl">/^\/admin\//</code> という「先頭から <code class="inl">/admin/</code>」の形で書かれている。
+    タブを 1 つ挟むと、文字列としてはもう先頭が <code class="inl">/admin/</code> ではないので一致しない。
+    しかしブラウザはタブを消してから解釈するので、行き先はしっかり <code class="inl">/admin/login</code> である。
+  </p>
+
+  <h4>実測データ：判定と実際の行き先の食い違い</h4>
+  <table class="data">
+    <tr>
+      <th>targetPath の値</th>
+      <th>旧 checkIsInAppPath</th>
+      <th>旧 除外判定</th>
+      <th>ブラウザの実際の行き先</th>
+    </tr>
+    <tr class="good">
+      <td class="mono">/drawings/80000</td>
+      <td><span class="tag ok">通す</span></td>
+      <td>素通り</td>
+      <td class="mono">zume-n.com/drawings/80000</td>
+    </tr>
+    <tr>
+      <td class="mono">//evil.example</td>
+      <td><span class="tag ok">弾く</span></td>
+      <td>素通り</td>
+      <td class="mono">evil.example</td>
+    </tr>
+    <tr>
+      <td class="mono">/\evil.example</td>
+      <td><span class="tag ok">弾く</span></td>
+      <td>素通り</td>
+      <td class="mono">evil.example</td>
+    </tr>
+    <tr class="bad">
+      <td class="mono">/⇥/evil.example</td>
+      <td><span class="tag ng">通す</span></td>
+      <td>素通り</td>
+      <td class="mono">evil.example ⚠️</td>
+    </tr>
+    <tr class="bad">
+      <td class="mono">/⇥admin/login?invitation=…</td>
+      <td><span class="tag ng">通す</span></td>
+      <td><span class="tag ng">素通り</span></td>
+      <td class="mono">zume-n.com/admin/login?invitation=… ⚠️</td>
+    </tr>
+    <tr class="good">
+      <td class="mono">/%09/evil.example</td>
+      <td><span class="tag ok">通す</span></td>
+      <td>素通り</td>
+      <td class="mono">zume-n.com/%09/evil.example</td>
+    </tr>
+  </table>
+
+  <h3 id="in-where">どこを直すか — 提案と、採った道の分かれ</h3>
+  <p>
+    CodeRabbit が提案した修正はこうだった。<em>「消費地点で <code class="inl">new URL</code> を使って正規化し、
+    origin を検証したうえで、正規化後の pathname・search・hash を除外判定に渡せ」</em>。
+    技術的には正しく効く。しかしこの PR では採用しなかった。
+  </p>
+
+  <div class="twoview">
+    <div class="pane browser">
+      <h5>提案：消費地点で正規化する</h5>
+      <div class="gate-flow" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="gate-node"><span class="gn-title">共通関数</span><span class="gn-sub">checkIsInAppPath（穴は残る）</span></div>
+        <div class="gate-node block"><span class="gn-title">消費地点 A</span><span class="gn-sub">new URL で正規化 ← 自前の判定</span></div>
+        <div class="gate-node block"><span class="gn-title">消費地点 B</span><span class="gn-sub">new URL で正規化 ← 同じ処理をもう一度</span></div>
+        <div class="gate-node missing"><span class="gn-title">将来の消費地点 C</span><span class="gn-sub">書き忘れると穴が再発</span></div>
+      </div>
+      <div class="verdict fail">判定が 2 系統に分裂する</div>
+    </div>
+    <div class="pane ours">
+      <h5>採用：共通関数を直す</h5>
+      <div class="gate-flow" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="gate-node pass"><span class="gn-title">共通関数</span><span class="gn-sub">checkIsInAppPath ← ここだけ直す</span></div>
+        <div class="gate-node"><span class="gn-title">消費地点 A</span><span class="gn-sub">呼ぶだけ</span></div>
+        <div class="gate-node"><span class="gn-title">消費地点 B</span><span class="gn-sub">呼ぶだけ</span></div>
+        <div class="gate-node"><span class="gn-title">将来の消費地点 C</span><span class="gn-sub">呼べば自動的に守られる</span></div>
+      </div>
+      <div class="verdict pass">判定は 1 系統のまま</div>
+    </div>
+  </div>
+
+  <p>
+    これは好みの問題ではない。前述のとおり、元の hotfix #4215 は<strong>まさにこの理由で
+    「消費側に別の判定を書かない」と決めていた</strong>。しかもこのアプリには消費地点が現に 2 つある
+    （この PR が触る <code class="inl">RequireCompanyId</code> と、stg/main 側の <code class="inl">AccessibleCompanies</code>）。
+    提案どおりに書けば、同じ正規化コードを 2 箇所に持ち、次に 3 つ目ができたとき静かに穴が開く。
+  </p>
+
+  <div class="callout ok">
+    <span class="label">採った修正</span>
+    <p>
+      すり抜けの<strong>原因である共通関数 1 箇所</strong>に、タブ・改行を含む値を丸ごと拒否するガードを足した。
+      正当なサイト内パスにこれらの文字が生で入ることはない（本来 <code class="inl">%09</code> 等に符号化される）ので、
+      正しい値を巻き込む心配もない。
+    </p>
+  </div>
+
+<pre><span class="kw">export const</span> <span class="fn">checkIsInAppPath</span> = (path: <span class="kw">string</span>): <span class="kw">boolean</span> =&gt;
+  /^\/[^\/\\]/.<span class="fn">test</span>(path) &amp;&amp; !/[\t\n\r]/.<span class="fn">test</span>(path);
+<span class="cm">//                                 ↑ 追加したのはこれだけ</span></pre>
+
+  <h3 id="in-reach">では、これは「炎上案件」だったのか — 到達可能性の話</h3>
+  <p>
+    指摘が技術的に正しいことと、それが今すぐ本番を止めるべき緊急事態であることは、別の問題だ。
+    ここは冷静に分けて考える必要がある。
+  </p>
+  <p>
+    攻撃が成立するには、<strong>生のタブを含む値が <code class="inl">targetPath</code> に保存されなければならない</strong>。
+    保存元をたどると、値の出どころは <code class="inl">router.asPath</code>——つまり
+    <em>ブラウザがすでに解析を終えた後の URL</em>——ただ一つである。
+  </p>
+
+  <div class="gates">
+    <div class="gate-title">攻撃者がタブ入り URL を踏ませようとすると何が起きるか</div>
+    <div class="gate-flow">
+      <div class="gate-node start"><span class="gn-title">罠のリンク</span><span class="gn-sub">https://zume-n.com/⇥/evil.example</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node block"><span class="gn-title">ブラウザが解析</span><span class="gn-sub">この時点でタブが消える</span></div>
+      <div class="gate-arrow">→</div>
+      <div class="gate-node dest-bad"><span class="gn-title">evil.example へ直行</span><span class="gn-sub">アプリのコードに到達しない</span></div>
+    </div>
+    <div class="cs-note">
+      → タブは<strong>アプリに届く前に</strong>消えるため、保存処理がタブ入りの値を受け取る経路が存在しない。
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">結論：深層防御の穴であって、悪用可能な脆弱性ではない</span>
+    <p>
+      残る侵入経路は「本人が DevTools で localStorage に手で書き込む」（＝自分で自分を攻撃する）か、
+      別途 XSS が存在する場合だけで、後者ならそもそももっと深刻な問題が起きている。
+      したがってこれは<strong>直すべきだが、本番を止めて緊急リリースする性質のものではない</strong>。
+    </p>
+  </div>
+
+  <p>
+    レビュー指摘に向き合うときの型として、これは覚えておく価値がある——
+    <strong>「指摘の事実が真か」と「提案された修正を採るか」と「どれだけ急ぐか」は、それぞれ独立に判定する。</strong>
+    今回は「事実は真 / 提案は不採用 / 緊急性は低い」という組み合わせだった。
+  </p>
+</section>
+
+<!-- ═══════════════ CODE ═══════════════ -->
+<section id="code">
+  <h2 class="section-title">コード解説</h2>
+  <p class="section-lead">
+    PR は 3 つのコミットからなる。最初の 2 つは当初の目的（欠けた検問を足す・読みやすくする）、
+    3 つ目が CodeRabbit への対応だ。
+  </p>
+
+  <h3>コミット 1 — 欠けていた検問を足す <code class="inl">57e1f5834</code></h3>
+  <p>
+    dev の消費地点 <code class="inl">RequireCompanyId</code> に、hotfix の「治療」半分にあたる
+    <code class="inl">checkIsExcludedPath</code> を追加した。ここまでは CodeRabbit 以前の話である。
+  </p>
+
+<pre class="diff"><span class="ctx">    const targetPath = getStringByLocalStorage(TARGET_PATH);</span>
+<span class="ctx">    removeItemFromLocalStorage(TARGET_PATH);</span>
+<span class="del">-   const nextPath =</span>
+<span class="del">-     targetPath != null &amp;&amp; checkIsInAppPath(targetPath)</span>
+<span class="del">-       ? targetPath</span>
+<span class="del">-       : CUSTOMER_LOGIN_REDIRECT_PATH;</span>
+<span class="add">+   const nextPath =</span>
+<span class="add">+     targetPath != null &amp;&amp;</span>
+<span class="add">+     checkIsInAppPath(targetPath) &amp;&amp;</span>
+<span class="add">+     !checkIsExcludedPath(targetPath)</span>
+<span class="add">+       ? targetPath</span>
+<span class="add">+       : CUSTOMER_LOGIN_REDIRECT_PATH;</span></pre>
+
+  <h3>コミット 2 — 三項演算子から ts-pattern へ <code class="inl">dc134918b</code></h3>
+  <p>
+    条件が 3 つ重なった時点で、三項演算子の連なりは「どの条件で何が起きるのか」を読み取りにくくする。
+    <code class="inl">match</code> に開くと、分岐ごとに理由をコメントで添えられる。
+    stg/main 側の同じ処理もすでにこの形になっていたので、両者の見た目が揃った。
+  </p>
+
+<pre><span class="kw">const</span> nextPath = <span class="fn">match</span>(targetPath)
+  <span class="cm">// 戻り先が保存されていない。ログイン画面から普通にログインするとここに来る</span>
+  .<span class="fn">with</span>(P.nullish, () =&gt; CUSTOMER_LOGIN_REDIRECT_PATH)
+  <span class="cm">// `//evil.example` や `/\evil.example` のように別サイトを指す値。</span>
+  <span class="cm">// localStorageは誰でも書き換えられるので、そのまま遷移させない</span>
+  .<span class="fn">when</span>(
+    (path) =&gt; !<span class="fn">checkIsInAppPath</span>(path),
+    () =&gt; CUSTOMER_LOGIN_REDIRECT_PATH
+  )
+  <span class="cm">// 社内向けの招待URL(/admin/login?invitation=...)やログイン画面など、</span>
+  <span class="cm">// 顧客が戻るとログインが終わらなくなる画面</span>
+  .<span class="fn">when</span>(checkIsExcludedPath, () =&gt; CUSTOMER_LOGIN_REDIRECT_PATH)
+  <span class="cm">// QRコードや共有リンクで開いた図面詳細など、ログイン前に見ようとしていた画面</span>
+  .<span class="fn">otherwise</span>((requestedPath) =&gt; requestedPath);</pre>
+
+  <div class="callout">
+    <span class="label">読みどころ</span>
+    <p>
+      この並び順が、後の防御に効いている。<code class="inl">checkIsInAppPath</code> の判定が
+      <strong>除外判定より先</strong>にあるため、コミット 3 でここにガードを足すと、
+      タブ入りの招待 URL（被害 B）は除外判定にたどり着く前に倒れる。
+    </p>
+  </div>
+
+  <h3>コミット 3 — CodeRabbit 対応：共通関数を直す <code class="inl">c41a6fc4f</code></h3>
+  <p>
+    ここが本題の修正だ。変更したのは<strong>式の末尾の 1 条件</strong>だけで、
+    残りは「なぜそれが要るのか」を説明する JSDoc と、回帰テストである。
+  </p>
+
+<pre class="diff"><span class="ctx"> export const checkIsInAppPath = (path: string): boolean =&gt;</span>
+<span class="del">-  /^\/[^\/\\]/.test(path);</span>
+<span class="add">+  /^\/[^\/\\]/.test(path) &amp;&amp; !/[\t\n\r]/.test(path);</span></pre>
+
+  <p>JSDoc には、この一見奇妙な条件がなぜ必要かを残した。半年後の読み手が消してしまわないように。</p>
+
+<pre><span class="cm">/**
+ * （前略）
+ *
+ * ブラウザはURLを解釈する前にタブと改行を取り除くため、`/&lt;タブ&gt;/evil.example` と書かれた値は
+ * 先頭2文字だけを見る判定をすり抜けて別サイトへの移動になる。同じ理由で `/&lt;タブ&gt;admin/login`
+ * のように除外パスの判定もすり抜けられる。アプリ内のパスにこれらの文字がそのまま入ることは
+ * ない（本来は `%09` などに符号化される）ので、含む値はまとめて弾く。
+ * @returns `/` で始まり、2文字目が `/` でも `\` でもなく、タブ・改行を含まなければ true
+ * @example
+ * checkIsInAppPath('/drawings/1')        // =&gt; true
+ * checkIsInAppPath('//evil.example')     // =&gt; false
+ * checkIsInAppPath('/\\evil.example')    // =&gt; false
+ * checkIsInAppPath('/\t/evil.example')   // =&gt; false
+ * checkIsInAppPath('/\tadmin/login')     // =&gt; false
+ */</span></pre>
+
+  <h4>回帰テストと、その「効いていること」の証明</h4>
+  <p>
+    指摘された 2 ケースをそのままテストにした。ただしテストを足すだけでは、
+    <em>そのテストが本当にこの修正を守っているのか</em>は分からない。
+    そこで<strong>追加したガードだけを取り外して、テストが落ちることを実測</strong>した。
+  </p>
+
+  <table class="data">
+    <tr><th>状態</th><th>テスト結果</th><th>意味</th></tr>
+    <tr class="good"><td>ガードあり（修正後）</td><td class="mono">12 passed</td><td>全て通る</td></tr>
+    <tr class="bad"><td><code class="inl">&amp;&amp; !/[\t\n\r]/…</code> を削除</td><td class="mono">2 failed / 10 passed</td><td>新テスト 2 件<strong>だけ</strong>が落ちる = ガードを正しく捕まえている</td></tr>
+    <tr class="good"><td>復元</td><td class="mono">12 passed</td><td>元に戻る</td></tr>
+  </table>
+
+  <div class="callout">
+    <span class="label">なぜこの手順が要るのか</span>
+    <p>
+      テストが通ることは「テストが正しい対象を見ている」ことを意味しない。
+      修正を外して<strong>期待どおりの件数だけが落ちる</strong>のを確かめて初めて、
+      そのテストがこの修正の番人であることが実証される。
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ EPILOGUE ═══════════════ -->
+<section id="epilogue">
+  <h2 class="section-title">後日談 — 「もう 1 か所にも同じ穴が」の落とし穴</h2>
+  <p class="section-lead">
+    この修正のあと、もう一つ間違いがあった。それも記録しておく価値がある。
+  </p>
+
+  <p>
+    <code class="inl">checkIsInAppPath</code> は、stg/main 側にも
+    <code class="inl">src/functions/targetPath.ts</code> という別ファイルとして同じ実装が残っている。
+    だから最初、こう申し送った——<em>「stg/main 側にも同型の穴があるので、別途 hotfix が必要です」</em>。
+  </p>
+  <p>
+    しかしこれは誤りだった。SSO ph2 のリリース（dev → stg → main → release）には、
+    <strong>そのファイルを削除する移設そのものが含まれている</strong>。
+    実際に <code class="inl">git merge-tree</code> でマージ後のツリーを作って中身を確かめると、こうなった。
+  </p>
+
+  <table class="data">
+    <tr><th>確認項目</th><th>実測結果</th></tr>
+    <tr><td>コンフリクト</td><td><span class="tag ok">0 件</span></td></tr>
+    <tr><td>Ph1 の <code class="inl">src/functions/targetPath.ts</code>（穴あり）</td><td>マージ後のツリーから<strong>削除される</strong></td></tr>
+    <tr class="good"><td>残る実装</td><td><code class="inl">src/libs/auth0/targetPath.ts</code> のみ・<strong>ガード込みで生存</strong></td></tr>
+  </table>
+
+  <p>
+    つまり通常のリリースフローに乗せるだけで解消し、別 hotfix（PR 3 本＋リリース調整）は
+    まるごと不要だった。前節の「到達可能性」と合わせれば、急ぐ理由も無い。
+  </p>
+
+  <div class="callout warn">
+    <span class="label">教訓</span>
+    <p>
+      「別ブランチにも同じ穴がある」と申し送る前に、<strong>マージフローでそのファイルが生き残るのかを実測する</strong>。
+      ファイル移設を含むリリースでは、穴のある側がファイルごと消えることがある。
+      不在の主張（「まだ塞がっていない」）は、存在の主張よりも検証が要る。
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ QUIZ ═══════════════ -->
+<section id="quiz">
+  <h2 class="section-title">理解度クイズ</h2>
+  <p class="section-lead">
+    5 問。選択肢をクリックすると正誤と解説が出る。丸暗記ではなく、仕組みを追えたかを確かめる問題にしてある。
+  </p>
+
+  <div id="quiz-root"></div>
+  <div id="score">まだ回答していません。</div>
+</section>
+
+</main>
+</div>
+</div>
+
+<script>
+const QUIZ = [
+  {
+    q: "旧 <code class=\"inl\">checkIsInAppPath</code>（<code class=\"inl\">/^\\/[^\\/\\\\]/</code>）が <code class=\"inl\">/⇥/evil.example</code> を「サイト内のパス」として通してしまったのは、なぜか。",
+    opts: [
+      "正規表現がバックスラッシュのエスケープを間違えており、常に true を返していたから",
+      "正規表現は 2 文字目が <code class=\"inl\">/</code> か <code class=\"inl\">\\</code> かだけを見ており、タブはそのどちらでもないから",
+      "文字列にタブが含まれると正規表現の <code class=\"inl\">test</code> が例外を投げ、握り潰されていたから",
+      "消費地点で先に <code class=\"inl\">new URL</code> が呼ばれ、判定が上書きされていたから"
+    ],
+    a: 1,
+    fb: [
+      "正規表現自体は書かれたとおりに動いていました。問題は「何を見ているか」であって、書き間違いではありません。",
+      "そのとおり。検問は 2 文字目が区切り記号かどうかしか見ていません。タブは <code class=\"inl\">/</code> でも <code class=\"inl\">\\</code> でもないので合格になり、その後ブラウザがタブを取り除いた結果 <code class=\"inl\">//evil.example</code> になります。",
+      "<code class=\"inl\">RegExp.test</code> はタブを含む文字列でも例外を投げません。普通に false/true を返します。",
+      "順序が逆です。判定は文字列に対して行われ、<code class=\"inl\">new URL</code> は同一 URL かどうかの比較にしか使われていませんでした。"
+    ]
+  },
+  {
+    q: "CodeRabbit の提案（消費地点で <code class=\"inl\">new URL</code> により正規化し origin を検証する）を採用しなかった、最も本質的な理由はどれか。",
+    opts: [
+      "<code class=\"inl\">new URL</code> は毎回オブジェクトを生成するため、レンダリング性能に影響するから",
+      "遷移可否の判定が共通関数と消費地点の 2 系統に分かれ、消費地点が増えたときに片方だけが腐るから",
+      "<code class=\"inl\">new URL</code> は一部ブラウザで未対応で、ポリフィルが必要になるから",
+      "TypeScript で <code class=\"inl\">URL</code> の型が付かず <code class=\"inl\">any</code> になってしまうから"
+    ],
+    a: 1,
+    fb: [
+      "性能は論点ではありません。ログイン後に一度だけ走る処理です。",
+      "そのとおり。元の hotfix #4215 が「消費側に別の判定を書かない」と明示的に決めた理由がこれです。現に消費地点は 2 つあり、3 つ目ができたとき静かに穴が開きます。",
+      "<code class=\"inl\">URL</code> は対象ブラウザすべてで利用可能です。互換性は論点になっていません。",
+      "<code class=\"inl\">URL</code> には標準の型定義があります。型は理由になっていません。"
+    ]
+  },
+  {
+    q: "この問題が「悪用可能な脆弱性ではなく、深層防御の穴」と判断された根拠はどれか。",
+    opts: [
+      "localStorage は JavaScript から読み取り専用で、書き換えられないから",
+      "<code class=\"inl\">targetPath</code> の保存元は <code class=\"inl\">router.asPath</code> だけで、ブラウザは URL を解釈する前にタブを取り除くため、生タブを含む値が保存処理に到達しないから",
+      "タブ文字はキーボードから URL 欄に入力できないから",
+      "Auth0 がコールバック時にタブを含む URL を拒否するから"
+    ],
+    a: 1,
+    fb: [
+      "localStorage は読み書きともに自由です。むしろ「誰でも書き換えられる」ことがこの検問の存在理由でした。",
+      "そのとおり。罠リンクを踏ませようとしても、ブラウザがアプリに到達する前にタブを取り除いてしまいます。残る経路は本人による手動書き込み（自己攻撃）か、別途の XSS だけです。",
+      "入力自体は可能ですが、それは論点ではありません。重要なのは入力後にブラウザが何をするかです。",
+      "Auth0 は無関係です。問題は保存と消費の間で完結しています。"
+    ]
+  },
+  {
+    q: "<code class=\"inl\">/%09/evil.example</code>（タブをパーセント符号化した値）は、修正後どう扱われるか。",
+    opts: [
+      "新しいガードが <code class=\"inl\">%09</code> を検出して弾く",
+      "ガードは素通りするが、外部サイトへ遷移するため危険なまま残っている",
+      "ガードは素通りし、遷移先も同一オリジンのままなので問題ない",
+      "<code class=\"inl\">checkIsExcludedPath</code> に一致して弾かれる"
+    ],
+    a: 2,
+    fb: [
+      "ガードは <code class=\"inl\">/[\\t\\n\\r]/</code>、つまり<strong>生の</strong>制御文字を探します。<code class=\"inl\">%09</code> は <code class=\"inl\">%</code>・<code class=\"inl\">0</code>・<code class=\"inl\">9</code> という普通の 3 文字なので一致しません。",
+      "遷移先を実測すると <code class=\"inl\">zume-n.com/%09/evil.example</code> で、オリジンは自サイトのままです。危険はありません。",
+      "そのとおり。符号化されたタブは URL 解析時に取り除かれないため、パスの一部として残るだけです。「生のタブ」と「符号化されたタブ」が別物であることが、このガードが正当な値を巻き込まない理由でもあります。",
+      "除外リストは <code class=\"inl\">/auth/</code>・<code class=\"inl\">/admin/</code>・<code class=\"inl\">/accessible_companies</code> なので、この値は一致しません。"
+    ]
+  },
+  {
+    q: "stg/main 側にも同じ実装が残っているのに、別途 hotfix が不要と結論づけられたのはなぜか。",
+    opts: [
+      "stg/main には <code class=\"inl\">checkIsInAppPath</code> がそもそも存在しないから",
+      "SSO ph2 のリリースで穴のある <code class=\"inl\">src/functions/targetPath.ts</code> がファイルごと削除され、ガード入りの <code class=\"inl\">src/libs/auth0/targetPath.ts</code> だけが残るから",
+      "stg/main では localStorage を使わず、サーバー側セッションで戻り先を管理しているから",
+      "CodeRabbit の指摘が dev ブランチ限定のものだったから"
+    ],
+    a: 1,
+    fb: [
+      "存在します。<code class=\"inl\">src/functions/targetPath.ts</code> として、同じ穴を持つ実装が残っています。",
+      "そのとおり。<code class=\"inl\">git merge-tree</code> でマージ後のツリーを実際に作って確認しました。コンフリクト 0 件で、穴のある側のファイルは削除され、ガード入りの実装だけが残ります。",
+      "両ブランチとも localStorage の <code class=\"inl\">targetPath</code> を使っています。仕組みは同じです。",
+      "指摘は dev の差分に対するものですが、同じコードが他ブランチにもある以上、対象範囲は自分で判断する必要があります。実際に最初は「別途対応が必要」と誤って申し送りました。"
+    ]
+  }
+];
+
+let answered = 0, correct = 0;
+const root = document.getElementById('quiz-root');
+
+QUIZ.forEach((item, qi) => {
+  const box = document.createElement('div');
+  box.className = 'quiz-item';
+
+  const num = document.createElement('div');
+  num.className = 'qnum';
+  num.textContent = 'Question ' + (qi + 1);
+  box.appendChild(num);
+
+  const qt = document.createElement('div');
+  qt.className = 'qtext';
+  qt.innerHTML = item.q;
+  box.appendChild(qt);
+
+  const fb = document.createElement('div');
+  fb.className = 'qfb';
+
+  item.opts.forEach((opt, oi) => {
+    const btn = document.createElement('button');
+    btn.className = 'qopt';
+    btn.innerHTML = '<span class="mark">' + 'ABCD'[oi] + '.</span>' + opt;
+    btn.onclick = () => {
+      const isRight = oi === item.a;
+      answered++;
+      if (isRight) correct++;
+      Array.from(box.querySelectorAll('.qopt')).forEach((b, bi) => {
+        b.disabled = true;
+        if (bi === item.a) b.classList.add('correct');
+        else if (bi === oi) b.classList.add('wrong');
+      });
+      fb.className = 'qfb show ' + (isRight ? 'right' : 'nope');
+      fb.innerHTML = '<strong>' + (isRight ? '正解 ✓' : '惜しい ✗') + '</strong> — ' + item.fb[oi]
+        + (isRight ? '' : '<br><br><strong>正解は ' + 'ABCD'[item.a] + '</strong>: ' + item.fb[item.a]);
+      updateScore();
+    };
+    box.appendChild(btn);
+  });
+
+  box.appendChild(fb);
+  root.appendChild(box);
+});
+
+function updateScore() {
+  const el = document.getElementById('score');
+  let msg = answered + ' / ' + QUIZ.length + ' 問回答 — 正解 ' + correct + ' 問';
+  if (answered === QUIZ.length) {
+    if (correct === QUIZ.length) msg += ' 🎉 全問正解。検問と実際の遷移先の食い違いという核心を完全に捉えています。';
+    else if (correct >= 3) msg += ' 👍 要点は掴めています。間違えた問題の解説をもう一度どうぞ。';
+    else msg += ' 📖 「核心」の節、特に 2 人の読み手の図をもう一度読んでみてください。';
+  }
+  el.textContent = msg;
+}
+</script>
+
+</body>
+</html>
