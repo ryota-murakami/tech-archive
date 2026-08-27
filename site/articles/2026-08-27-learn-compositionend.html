@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="IME 変換中に onChange だけでは捕まえられない理由と、compositionstart / update / end および isComposing の実測に基づく解説。" />
+<meta name="archive:title" content="compositionend — 日本語入力とブラウザイベントの話" />
+<meta name="archive:published" content="2026-08-27" />
+<meta name="archive:type" content="Explainer" />
+<meta name="archive:source" content="W3C UI Events · MDN compositionend" />
+<meta name="archive:category" content="IME" />
+<meta name="archive:category" content="Browser Events" />
+<meta name="archive:category" content="React" />
+<meta name="archive:category" content="Frontend" />
+<meta name="archive:reading-minutes" content="12" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="if (e.isComposing) return; // compositionend first" />
+<title>compositionend — 日本語入力とブラウザイベントの話</title>
+<style>
+:root{
+  --ink:#1a1a1a; --ink-soft:#4a4a4a; --line:#e2e2e2; --bg:#fdfdfc;
+  --accent:#1976D2; --accent-soft:#E9F4FF;
+  --warn:#B45309; --warn-soft:#FEF3C7;
+  --danger:#B91C1C; --danger-soft:#FEE2E2;
+  --ok:#15803D; --ok-soft:#DCFCE7;
+  --unv:#6D28D9; --unv-soft:#EDE9FE;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.85; font-size:17px;
+}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 120px}
+header.hero{padding:64px 0 32px;border-bottom:1px solid var(--line);margin-bottom:32px}
+h1{font-size:2.1rem;line-height:1.35;margin:0 0 12px;letter-spacing:-.01em}
+.sub{color:var(--ink-soft);font-size:1.02rem;margin:0}
+.meta{margin-top:20px;font-size:.85rem;color:var(--ink-soft);font-family:var(--mono)}
+h2{font-size:1.5rem;margin:64px 0 8px;padding-top:12px;letter-spacing:-.01em;scroll-margin-top:20px}
+h2 .num{color:var(--accent);font-family:var(--mono);font-size:1rem;margin-right:10px}
+h3{font-size:1.13rem;margin:38px 0 8px}
+h4{font-size:1rem;margin:26px 0 6px;color:var(--ink-soft)}
+p{margin:14px 0}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.87em;background:#f1f1ef;padding:2px 5px;border-radius:4px}
+pre{
+  font-family:var(--mono);font-size:.82rem;line-height:1.65;
+  background:#1e1e21;color:#e8e8ea;padding:16px 18px;border-radius:8px;
+  overflow-x:auto; white-space:pre;
+}
+pre code{background:none;padding:0;color:inherit;font-size:1em}
+.tok-c{color:#8b949e}
+.tok-k{color:#ff7b72}
+.tok-s{color:#a5d6ff}
+.tok-f{color:#d2a8ff}
+
+/* --- table of contents --- */
+nav.toc{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin:0 0 8px}
+nav.toc strong{display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:10px}
+nav.toc ol{margin:0;padding-left:22px}
+nav.toc li{margin:5px 0}
+nav.toc a{text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+nav.toc .skip{font-size:.82rem;color:var(--ink-soft)}
+
+/* --- callouts --- */
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:14px 18px;border-radius:0 8px 8px 0;margin:22px 0}
+.callout .label{font-weight:700;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:4px}
+.callout p:first-of-type{margin-top:0}
+.callout p:last-child{margin-bottom:0}
+.callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+.callout.warn .label{color:var(--warn)}
+.callout.danger{border-color:var(--danger);background:var(--danger-soft)}
+.callout.danger .label{color:var(--danger)}
+.callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+.callout.ok .label{color:var(--ok)}
+.callout.unverified{border-color:var(--unv);background:var(--unv-soft)}
+.callout.unverified .label{color:var(--unv)}
+
+/* --- fake input UI --- */
+.ui-demo{background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px;margin:24px 0}
+.ui-demo .cap{font-size:.8rem;color:var(--ink-soft);margin-bottom:12px}
+.fake-input{
+  border:1px solid #b8b8b8;border-radius:6px;padding:10px 12px;background:#fff;
+  font-size:1.15rem;font-family:var(--mono);min-height:44px;display:flex;align-items:center;gap:1px
+}
+.fake-input.focused{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.preedit{border-bottom:2px dotted #666;background:#f5f5f0}
+.committed{border-bottom:none}
+.caret{display:inline-block;width:2px;height:1.2em;background:var(--accent);animation:blink 1s step-end infinite;vertical-align:middle}
+@keyframes blink{50%{opacity:0}}
+.ui-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+.ui-row > div{flex:1 1 220px}
+.ui-row .lbl{font-size:.78rem;color:var(--ink-soft);margin-bottom:6px;font-family:var(--mono)}
+
+/* --- timeline diagram --- */
+.timeline{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px;margin:24px 0;overflow-x:auto}
+.timeline .cap{font-size:.8rem;color:var(--ink-soft);margin-bottom:14px}
+.tl-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed #ededed;min-width:560px}
+.tl-row:last-child{border-bottom:none}
+.tl-row.hi{background:#FFF9E6;margin:0 -8px;padding:6px 8px;border-radius:4px}
+.tl-n{font-family:var(--mono);font-size:.72rem;color:#aaa;width:22px;text-align:right;flex:none}
+.ev{font-family:var(--mono);font-size:.76rem;padding:3px 9px;border-radius:20px;white-space:nowrap;flex:none;font-weight:600}
+.ev.comp{background:#EDE9FE;color:#5B21B6}
+.ev.compend{background:#5B21B6;color:#fff}
+.ev.input{background:#DBEAFE;color:#1E40AF}
+.ev.before{background:#EFF6FF;color:#60A5FA}
+.ev.key{background:#F3F4F6;color:#374151}
+.tl-detail{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);white-space:nowrap}
+.tl-detail b{color:var(--ink)}
+.flag{font-family:var(--mono);font-size:.68rem;padding:1px 6px;border-radius:3px;white-space:nowrap}
+.flag.t{background:#DCFCE7;color:#15803D}
+.flag.f{background:#FEE2E2;color:#B91C1C}
+.flag.n{background:#F3F4F6;color:#9CA3AF}
+
+/* --- state diagram --- */
+.states{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:24px 0;justify-content:center}
+.state-box{border:2px solid var(--accent);border-radius:10px;padding:14px 20px;text-align:center;background:#fff;min-width:150px}
+.state-box.composing{border-color:#5B21B6;background:#F5F3FF}
+.state-box .nm{font-family:var(--mono);font-size:.85rem;font-weight:700}
+.state-box .dsc{font-size:.75rem;color:var(--ink-soft);margin-top:4px}
+.arrow{display:flex;flex-direction:column;align-items:center;padding:0 6px;min-width:150px}
+.arrow .ln{font-size:1.4rem;color:var(--ink-soft);line-height:1}
+.arrow .lb{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);text-align:center}
+
+/* --- tables --- */
+table{width:100%;border-collapse:collapse;margin:22px 0;font-size:.9rem;background:#fff}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:#f7f7f5;font-weight:700;font-size:.82rem}
+td code{font-size:.85em}
+.tbl-wrap{overflow-x:auto}
+
+/* --- source citation --- */
+.src{font-size:.78rem;color:var(--ink-soft);margin-top:-8px;padding-left:2px;font-style:italic}
+.src a{color:var(--ink-soft)}
+
+/* --- quiz --- */
+.quiz{background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px;margin:22px 0}
+.quiz .q{font-weight:700;margin:0 0 14px}
+.quiz .q .qn{color:var(--accent);font-family:var(--mono);margin-right:8px}
+.opt{
+  display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fdfdfc;
+  border-radius:8px;padding:11px 14px;margin:7px 0;cursor:pointer;font:inherit;font-size:.93rem;
+  transition:background .12s,border-color .12s
+}
+.opt:hover:not(:disabled){background:#f4f8fd;border-color:var(--accent)}
+.opt:disabled{cursor:default}
+.opt.correct{background:var(--ok-soft);border-color:var(--ok);font-weight:600}
+.opt.wrong{background:var(--danger-soft);border-color:var(--danger)}
+.fb{margin-top:12px;padding:12px 14px;border-radius:8px;font-size:.9rem;display:none}
+.fb.show{display:block}
+.fb.good{background:var(--ok-soft);color:#14532d}
+.fb.bad{background:var(--danger-soft);color:#7f1d1d}
+.score{text-align:center;font-size:1.05rem;padding:18px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-top:22px}
+.score b{color:var(--accent);font-size:1.4rem;font-family:var(--mono)}
+
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);font-size:.85rem;color:var(--ink-soft)}
+footer ul{padding-left:20px}
+footer li{margin:5px 0}
+@media (max-width:600px){
+  body{font-size:16px}
+  h1{font-size:1.6rem}
+  h2{font-size:1.28rem;margin-top:48px}
+  .wrap{padding:0 16px 80px}
+  .arrow{min-width:100%;padding:10px 0}
+  .state-box{min-width:100%}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>compositionend — 日本語入力とブラウザイベントの話</h1>
+  <p class="sub">「ひらがなを打っているのに、なぜ <code>onChange</code> では捕まえられないのか」。<br>日本語・中国語・韓国語を扱うすべての Web アプリが、いつか必ずぶつかる仕組みの話です。</p>
+  <p class="meta">2026-08-27 ／ 実測: HeadlessChrome 152.0.0.0 (macOS) ／ 仕様: W3C UI Events</p>
+</header>
+
+<nav class="toc">
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#s1">背景 — なぜ「確定」という概念が要るのか</a> <span class="skip">（IME に馴染みがあれば読み飛ばしても大丈夫）</span></li>
+    <li><a href="#s2">背景（近景） — 3 つの composition イベント</a></li>
+    <li><a href="#s3">直感 — 「下書き」と「清書」</a></li>
+    <li><a href="#s4">仕組み — 実測したイベントの並び</a></li>
+    <li><a href="#s5">このコードベースでは</a></li>
+    <li><a href="#s6">理解度チェック（5 問）</a></li>
+  </ol>
+</nav>
+
+<div class="callout">
+  <span class="label">この文書の出所</span>
+  <p>本文の事実には 3 種類の出所しかありません。<b>①仕様書・MDN からの引用</b>（リンク付き）、<b>②今日この場で Chrome を動かして計測した結果</b>（そのままの生ログを載せています）、<b>③このリポジトリを grep した結果</b>（ファイル名と行番号付き）。検証できなかったことは紫の「未検証」ボックスで明示し、確信ありげな文章に混ぜていません。</p>
+</div>
+
+<h2 id="s1"><span class="num">1</span>背景 — なぜ「確定」という概念が要るのか</h2>
+
+<p>英語のテキスト入力は、驚くほど素直です。<code>k</code> キーを押せば <code>k</code> が入る。キーを押した回数と、画面に増える文字の数が一致している。ブラウザのイベントモデルも、その素直さを前提に設計されました。キーを押す（<code>keydown</code>）、文字が入る（<code>input</code>）、キーを離す（<code>keyup</code>）。それだけです。</p>
+
+<p>ところが日本語では、この一致が崩れます。「図面」と入力したいとき、私たちはまず <code>z</code> <code>u</code> <code>m</code> <code>e</code> <code>n</code> と 5 回打ち、変換キーを押し、候補の中から「図面」を選び、Enter で確定します。打鍵は 5 回以上あるのに、最終的に入るのは 2 文字。しかも打っている途中の画面には <span class="preedit">ずめん</span> という、まだ本物ではない文字列が表示されている。</p>
+
+<p>この「まだ本物ではない文字列」を作っているのは、ブラウザでもキーボードでもなく、OS の<b>入力メソッド（IME: Input Method Editor）</b>です。IME はキーボードとアプリケーションの間に立ち、打鍵を溜め込み、変換し、ユーザーが納得したタイミングで初めてアプリに文字を引き渡します。</p>
+
+<div class="ui-demo">
+  <p class="cap">入力欄の中で起きていること — 点線の下線が付いている部分が「まだ IME が握っている、確定前の文字」です</p>
+  <div class="ui-row">
+    <div>
+      <div class="lbl">変換中（未確定）</div>
+      <div class="fake-input focused"><span class="preedit">ずめーん</span><span class="caret"></span></div>
+    </div>
+    <div>
+      <div class="lbl">確定後</div>
+      <div class="fake-input focused"><span class="committed">ズメーン</span><span class="caret"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">用語</span>
+  <p><b>composition（コンポジション / 変換セッション）</b>とは、IME が「今この人は文字を組み立てている最中だ」と認識している一区切りのことです。始まりがあり、途中経過があり、終わりがあります。この一区切りを Web アプリ側から観測するための仕組みが、Composition Events です。</p>
+</div>
+
+<p>なぜアプリ側がこれを知る必要があるのでしょうか。理由は 2 つあり、どちらも実害を伴います。</p>
+
+<p>ひとつは <b>Enter キーの意味が変わる</b>こと。変換中の Enter は「この候補で確定する」という意味ですが、変換していないときの Enter は「フォームを送信する」「次のセルへ移動する」という意味になります。区別しないと、変換を確定しようとした瞬間にフォームが飛んでいきます。</p>
+
+<p>もうひとつは <b>途中経過の文字列が「正しくない」</b>こと。ローマ字入力の途中には <span class="preedit">ｚ</span> や <span class="preedit">ずｍ</span> といった、日本語としては存在しない文字列が現れます。1 打鍵ごとに検証を走らせる作りだと、この途中の文字列に対してエラーが出たり消えたりを繰り返します。</p>
+
+<h2 id="s2"><span class="num">2</span>背景（近景） — 3 つの composition イベント</h2>
+
+<p>ブラウザは、この変換セッションを 3 つのイベントで通知します。W3C UI Events 仕様は、この 3 つの<b>相互の順序だけ</b>を規定しています。</p>
+
+<div class="callout">
+  <span class="label">仕様の原文</span>
+  <p>“The Composition Events defined in this specification MUST occur in the following set order relative to one another: 1. <code>compositionstart</code> 2. <code>compositionupdate</code> (Multiple events) 3. <code>compositionend</code>”</p>
+  <p class="src">出典: <a href="https://www.w3.org/TR/uievents/">W3C UI Events</a> §3.6.2 Composition Event Order</p>
+</div>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>イベント</th><th>いつ飛ぶか</th><th><code>data</code> の中身</th><th>Bubbles</th><th>Cancelable</th></tr></thead>
+  <tbody>
+    <tr><td><code>compositionstart</code></td><td>変換セッションが始まったとき</td><td>空文字（実測）</td><td>Yes</td><td><b>Yes</b></td></tr>
+    <tr><td><code>compositionupdate</code></td><td>未確定文字列が変わるたび（複数回）</td><td>その時点の未確定文字列</td><td>Yes</td><td>No</td></tr>
+    <tr><td><code>compositionend</code></td><td>変換が<b>確定</b>または<b>キャンセル</b>されたとき</td><td>最終的に確定した文字列</td><td>Yes</td><td>No</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="src">Bubbles / Cancelable は <a href="https://www.w3.org/TR/uievents/">W3C UI Events</a> のイベント型テーブルより。<code>data</code> の説明は同仕様「the characters generated by an input method」および <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/compositionend_event">MDN</a> より。</p>
+
+<p>ここで <code>compositionend</code> の定義に、見落としやすい言葉が入っています。MDN の表現を借りると、このイベントは変換セッションが <b>“completes <u>or cancels</u>”</b> したときに発火します。つまり <b>Esc で変換を取り消したときにも飛んでくる</b>。「compositionend が来た＝ユーザーが文字を確定した」と読むのは、半分しか正しくありません。</p>
+
+<div class="callout warn">
+  <span class="label">よくある誤解</span>
+  <p><code>compositionend</code> は「確定イベント」ではなく「<b>変換セッションの終了イベント</b>」です。確定でも終わるし、取り消しでも終わる。取り消しの場合、<code>event.data</code> は空文字になります（＝入力欄には何も残らない）。<code>data</code> の中身を無条件に信用して処理を分岐させると、Esc を押したユーザーの入力欄が壊れます。</p>
+</div>
+
+<h2 id="s3"><span class="num">3</span>直感 — 「下書き」と「清書」</h2>
+
+<p>仕組みを一言で言えば、こうなります。</p>
+
+<div class="callout ok">
+  <span class="label">核心</span>
+  <p>変換中、入力欄には <b>IME の下書き</b>が仮置きされている。<code>compositionend</code> は、その下書きが消えて<b>清書が確定した瞬間</b>を知らせるイベントである。</p>
+</div>
+
+<p>「下書きも入力欄の <code>value</code> に入っている」というのが、この話の面白いところです。<code>input.value</code> を読むと、変換中でも <code>"ずめーん"</code> が返ってきます。ブラウザは下書きと清書を <code>value</code> の上では区別しません。区別できるのは、イベントの側だけなのです。</p>
+
+<div class="states">
+  <div class="state-box">
+    <div class="nm">idle</div>
+    <div class="dsc">変換していない<br>value = 清書だけ</div>
+  </div>
+  <div class="arrow">
+    <div class="lb">最初の打鍵</div>
+    <div class="ln">&#10230;</div>
+    <div class="lb"><code>compositionstart</code></div>
+  </div>
+  <div class="state-box composing">
+    <div class="nm">composing</div>
+    <div class="dsc">変換中<br>value = 清書 + <u>下書き</u></div>
+  </div>
+</div>
+<div class="states">
+  <div class="state-box composing">
+    <div class="nm">composing</div>
+    <div class="dsc">変換中</div>
+  </div>
+  <div class="arrow">
+    <div class="lb">Enter で確定 / Esc で取消</div>
+    <div class="ln">&#10230;</div>
+    <div class="lb"><code>compositionend</code></div>
+  </div>
+  <div class="state-box">
+    <div class="nm">idle</div>
+    <div class="dsc">value = 清書だけ<br>（取消なら元のまま）</div>
+  </div>
+</div>
+
+<p>そして composing の状態にいる間も、打鍵のたびに <code>input</code> イベントは飛んできます。<b>これが最大の落とし穴です。</b>「<code>onChange</code> を見ていれば入力は全部拾える」というのは正しいのですが、拾えてしまうものの中に下書きが混ざっている。React の公式ドキュメントも <code>onChange</code> を「Behaves like the browser <code>input</code> event」と説明しています。<span class="src">出典: React 公式ドキュメント <code>react-dom/components/input.md</code>（Context7 経由）</span></p>
+
+<div class="ui-demo">
+  <p class="cap">「ずめーん」と打って「ズメーン」に変換するまでに、<code>input</code> イベントは 6 回飛ぶ — その 6 回はすべて下書きです</p>
+  <div class="ui-row">
+    <div><div class="lbl">input #1</div><div class="fake-input"><span class="preedit">ｚ</span></div></div>
+    <div><div class="lbl">input #2</div><div class="fake-input"><span class="preedit">ず</span></div></div>
+    <div><div class="lbl">input #3</div><div class="fake-input"><span class="preedit">ずｍ</span></div></div>
+  </div>
+  <div class="ui-row">
+    <div><div class="lbl">input #4</div><div class="fake-input"><span class="preedit">ずめ</span></div></div>
+    <div><div class="lbl">input #5</div><div class="fake-input"><span class="preedit">ずめー</span></div></div>
+    <div><div class="lbl">input #6</div><div class="fake-input"><span class="preedit">ずめーん</span></div></div>
+  </div>
+</div>
+
+<p>「ｚ は全角カタカナではありません」というエラーを、この 6 回のうち 3 回出してしまう。これが冒頭に書いた「エラーが点滅する」の正体です。<code>compositionend</code> は、この騒がしさを黙らせるためのスイッチとして使われます。</p>
+
+<h2 id="s4"><span class="num">4</span>仕組み — 実測したイベントの並び</h2>
+
+<p>ここからは推測をやめて、実際に測ります。素の <code>&lt;input&gt;</code> を持つページを用意し、Chrome DevTools Protocol の <code>Input.imeSetComposition</code> で本物の変換セッションを発生させ、飛んできたイベントを全部記録しました。</p>
+
+<pre><code><span class="tok-c">// 計測ハーネス: すべてのイベントを value ごと記録する</span>
+<span class="tok-k">const</span> types = [<span class="tok-s">'keydown'</span>,<span class="tok-s">'keyup'</span>,<span class="tok-s">'compositionstart'</span>,<span class="tok-s">'compositionupdate'</span>,
+               <span class="tok-s">'compositionend'</span>,<span class="tok-s">'beforeinput'</span>,<span class="tok-s">'input'</span>,<span class="tok-s">'change'</span>]
+<span class="tok-k">for</span> (<span class="tok-k">const</span> type <span class="tok-k">of</span> types) {
+  el.<span class="tok-f">addEventListener</span>(type, (e) => window.__log.<span class="tok-f">push</span>({
+    type: e.type, data: e.data, isComposing: e.isComposing, value: el.value
+  }))
+}
+
+<span class="tok-c">// 駆動: ローマ字を1文字ずつ積んでいき、最後に確定する</span>
+<span class="tok-k">for</span> (<span class="tok-k">const</span> text <span class="tok-k">of</span> [<span class="tok-s">'ｚ'</span>,<span class="tok-s">'ず'</span>,<span class="tok-s">'ずｍ'</span>,<span class="tok-s">'ずめ'</span>,<span class="tok-s">'ずめー'</span>,<span class="tok-s">'ずめーん'</span>]) {
+  <span class="tok-k">await</span> cdp.<span class="tok-f">send</span>(<span class="tok-s">'Input.imeSetComposition'</span>,
+    { text, selectionStart: text.length, selectionEnd: text.length })
+}
+<span class="tok-k">await</span> cdp.<span class="tok-f">send</span>(<span class="tok-s">'Input.insertText'</span>, { text: <span class="tok-s">'ズメーン'</span> })  <span class="tok-c">// 変換して確定</span></code></pre>
+
+<h3>実測結果 — 「ずめーん」→「ズメーン」の全 23 イベント</h3>
+
+<div class="timeline">
+  <p class="cap">Chrome 152 / macOS。冗長な中間ステップは省略していますが、<b>並び順は生ログのまま</b>です。</p>
+  <div class="tl-row"><span class="tl-n">1</span><span class="ev comp">compositionstart</span><span class="tl-detail">data=<b>""</b> &nbsp; value=<b>""</b></span></div>
+  <div class="tl-row"><span class="tl-n">2</span><span class="ev comp">compositionupdate</span><span class="tl-detail">data=<b>"ｚ"</b> &nbsp; value=<b>""</b> &nbsp; <span class="flag n">← value はまだ空</span></span></div>
+  <div class="tl-row"><span class="tl-n">3</span><span class="ev before">beforeinput</span><span class="tl-detail">data=<b>"ｚ"</b> &nbsp; isComposing=<span class="flag t">true</span> &nbsp; inputType=insertCompositionText</span></div>
+  <div class="tl-row"><span class="tl-n">4</span><span class="ev input">input</span><span class="tl-detail">data=<b>"ｚ"</b> &nbsp; isComposing=<span class="flag t">true</span> &nbsp; value=<b>"ｚ"</b> &nbsp; <span class="flag n">← ここで初めて反映</span></span></div>
+  <div class="tl-row"><span class="tl-n">5</span><span class="ev comp">compositionupdate</span><span class="tl-detail">data=<b>"ず"</b> &nbsp; value=<b>"ｚ"</b></span></div>
+  <div class="tl-row"><span class="tl-n">6</span><span class="ev before">beforeinput</span><span class="tl-detail">data=<b>"ず"</b> &nbsp; isComposing=<span class="flag t">true</span></span></div>
+  <div class="tl-row"><span class="tl-n">7</span><span class="ev input">input</span><span class="tl-detail">data=<b>"ず"</b> &nbsp; isComposing=<span class="flag t">true</span> &nbsp; value=<b>"ず"</b></span></div>
+  <div class="tl-row"><span class="tl-n" style="width:auto">8–19</span><span class="tl-detail" style="color:#aaa">… 同じ 3 点セットが「ずｍ」「ずめ」「ずめー」「ずめーん」と 4 回繰り返される …</span></div>
+  <div class="tl-row"><span class="tl-n">20</span><span class="ev comp">compositionupdate</span><span class="tl-detail">data=<b>"ズメーン"</b> &nbsp; value=<b>"ずめーん"</b> &nbsp; <span class="flag n">← 変換確定の瞬間</span></span></div>
+  <div class="tl-row"><span class="tl-n">21</span><span class="ev before">beforeinput</span><span class="tl-detail">data=<b>"ズメーン"</b> &nbsp; isComposing=<span class="flag t">true</span></span></div>
+  <div class="tl-row hi"><span class="tl-n">22</span><span class="ev input">input</span><span class="tl-detail">data=<b>"ズメーン"</b> &nbsp; isComposing=<span class="flag t">true</span> &nbsp; value=<b>"ズメーン"</b></span></div>
+  <div class="tl-row hi"><span class="tl-n">23</span><span class="ev compend">compositionend</span><span class="tl-detail">data=<b>"ズメーン"</b> &nbsp; value=<b>"ズメーン"</b> &nbsp; <span class="flag t">← これが最後。後続の input は無い</span></span></div>
+</div>
+
+<p>この生ログから、実務に効く事実が 3 つ読み取れます。</p>
+
+<h3>事実 1 — <code>compositionend</code> は最後に来る（Chrome では）</h3>
+
+<p>行 22 と 23 に注目してください。確定時の <code>input</code> は <code>compositionend</code> の<b>前</b>に来ており、しかもその <code>isComposing</code> は <b><code>true</code></b> です。そして <code>compositionend</code> の後には、<code>isComposing: false</code> の <code>input</code> が<b>来ません</b>。</p>
+
+<div class="callout danger">
+  <span class="label">ここが罠</span>
+  <p>「<code>onChange</code> の中で <code>isComposing</code> が false のときだけ処理する」という書き方は、Chrome では <b>IME 入力に対して一度も発火しません</b>。変換中の input はすべて <code>isComposing: true</code>、確定時の input も <code>true</code>、そして確定後に input は来ないからです。<br>変換確定のタイミングで値を書き換えたいなら、<b><code>compositionend</code> を直接聞く以外にありません。</b></p>
+</div>
+
+<p>逆に言えば、<code>compositionend</code> が最後に来るということは、<b>そこで <code>value</code> を書き換えても後から上書きされない</b>ということでもあります。安心して正規化処理を置ける場所なのです。</p>
+
+<h3>事実 2 — <code>compositionupdate</code> の時点では <code>value</code> はまだ古い</h3>
+
+<p>行 5 をもう一度見てください。<code>compositionupdate</code> の <code>data</code> は <code>"ず"</code> なのに、<code>el.value</code> はまだ <code>"ｚ"</code> のままです。値が実際に DOM へ反映されるのは、その次の <code>input</code> イベントのタイミング。</p>
+
+<div class="callout warn">
+  <span class="label">実装上の帰結</span>
+  <p><code>compositionupdate</code> のハンドラで <code>e.currentTarget.value</code> を読むと、<b>1 ステップ古い値</b>が取れます。最新の未確定文字列が欲しければ <code>e.data</code> を読んでください。<br>（<code>compositionend</code> では両者が一致するので、この問題は起きません — 行 23 で <code>data</code> と <code>value</code> はどちらも <code>"ズメーン"</code>）</p>
+</div>
+
+<h3>事実 3 — <code>keydown</code> にも <code>isComposing</code> が付く</h3>
+
+<p>Enter キーの問題を確かめるため、2 本目の計測をしました。変換中に Enter を押し、確定させ、もう一度 Enter を押しています。</p>
+
+<div class="timeline">
+  <p class="cap">Chrome 152。<code>Input.dispatchKeyEvent</code> で Enter を 2 回、変換の前後に分けて送っています。</p>
+  <div class="tl-row"><span class="tl-n">1</span><span class="ev comp">compositionstart</span><span class="tl-detail">value=<b>""</b></span></div>
+  <div class="tl-row"><span class="tl-n">2</span><span class="ev comp">compositionupdate</span><span class="tl-detail">data=<b>"ずめ"</b></span></div>
+  <div class="tl-row"><span class="tl-n">3</span><span class="ev before">beforeinput</span><span class="tl-detail">isComposing=<span class="flag t">true</span></span></div>
+  <div class="tl-row"><span class="tl-n">4</span><span class="ev input">input</span><span class="tl-detail">isComposing=<span class="flag t">true</span> &nbsp; value=<b>"ずめ"</b></span></div>
+  <div class="tl-row hi"><span class="tl-n">5</span><span class="ev key">keydown</span><span class="tl-detail">key=<b>Enter</b> &nbsp; isComposing=<span class="flag t">true</span> &nbsp; <span class="flag n">← 「確定したい」Enter</span></span></div>
+  <div class="tl-row"><span class="tl-n">6</span><span class="ev key">keyup</span><span class="tl-detail">key=<b>Enter</b> &nbsp; isComposing=<span class="flag t">true</span></span></div>
+  <div class="tl-row"><span class="tl-n">7</span><span class="ev comp">compositionupdate</span><span class="tl-detail">data=<b>"ズメ"</b> &nbsp; value=<b>"ずめ"</b></span></div>
+  <div class="tl-row"><span class="tl-n">8</span><span class="ev before">beforeinput</span><span class="tl-detail">isComposing=<span class="flag t">true</span></span></div>
+  <div class="tl-row"><span class="tl-n">9</span><span class="ev input">input</span><span class="tl-detail">isComposing=<span class="flag t">true</span> &nbsp; value=<b>"ズメ"</b></span></div>
+  <div class="tl-row"><span class="tl-n">10</span><span class="ev compend">compositionend</span><span class="tl-detail">data=<b>"ズメ"</b> &nbsp; value=<b>"ズメ"</b></span></div>
+  <div class="tl-row hi"><span class="tl-n">11</span><span class="ev key">keydown</span><span class="tl-detail">key=<b>Enter</b> &nbsp; isComposing=<span class="flag f">false</span> &nbsp; <span class="flag n">← 「送信したい」Enter</span></span></div>
+  <div class="tl-row"><span class="tl-n">12</span><span class="ev key">keyup</span><span class="tl-detail">key=<b>Enter</b> &nbsp; isComposing=<span class="flag f">false</span></span></div>
+</div>
+
+<p>行 5 と行 11 は、どちらも「Enter の <code>keydown</code>」です。人間にとっては全く違う操作なのに、<code>e.key</code> だけを見ると区別が付きません。区別できる唯一の手がかりが <code>isComposing</code> であり、実測どおり <b>行 5 は <code>true</code>、行 11 は <code>false</code></b> になっています。</p>
+
+<pre><code><span class="tok-c">// これだけで「変換確定の Enter」と「送信の Enter」を分けられる</span>
+<span class="tok-k">const</span> <span class="tok-f">handleKeyDown</span> = (e) => {
+  <span class="tok-k">if</span> (e.nativeEvent.isComposing) <span class="tok-k">return</span>   <span class="tok-c">// 変換中の Enter は IME のもの。触らない</span>
+  <span class="tok-k">if</span> (e.key === <span class="tok-s">'Enter'</span>) <span class="tok-f">submit</span>()
+}</code></pre>
+
+<div class="callout">
+  <span class="label">仕様の定義</span>
+  <p><code>isComposing</code> は “true if the input event occurs as part of a composition session, i.e., after a <code>compositionstart</code> event and before the corresponding <code>compositionend</code> event.” と定義されています。<b>「compositionstart の後、対応する compositionend の前」</b>という、まさに区間の内側を表すフラグです。</p>
+  <p class="src">出典: <a href="https://www.w3.org/TR/uievents/">W3C UI Events</a>（InputEvent の <code>isComposing</code> 定義）</p>
+</div>
+
+<div class="callout warn">
+  <span class="label">どこに <code>isComposing</code> があるか</span>
+  <p><code>isComposing</code> を持っているのは <code>InputEvent</code>（= <code>input</code> / <code>beforeinput</code>）と <code>KeyboardEvent</code>（= <code>keydown</code> / <code>keyup</code>）だけです。<b><code>CompositionEvent</code> には無い</b> — 実測でも composition 系の行はすべて <code>undefined</code> でした。<code>onCompositionEnd</code> のハンドラで <code>e.isComposing</code> を読んでも <code>undefined</code> しか返りません。</p>
+</div>
+
+<h3>仕様が決めていないこと — <code>input</code> と <code>compositionend</code> の順序</h3>
+
+<p>ここまで「Chrome では」と繰り返してきたのには理由があります。仕様が保証しているのは <b>composition 3 兄弟の相互の順序だけ</b>で、<code>input</code> がその中のどこに挟まるかは<b>規定されていない</b>のです。そして実際、エンジンごとに違います。</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>エンジン</th><th>確定時の順序</th><th>確定時の <code>input</code> の <code>isComposing</code></th><th>出所</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Blink</b>（Chrome / Edge）</td>
+      <td><code>input</code> → <code>compositionend</code></td>
+      <td><code>true</code>（後続 input なし）</td>
+      <td><b>本日実測</b></td>
+    </tr>
+    <tr>
+      <td><b>WebKit</b>（Safari）</td>
+      <td><code>input</code> → <code>compositionend</code></td>
+      <td><code>true</code></td>
+      <td>w3c/uievents #202</td>
+    </tr>
+    <tr>
+      <td><b>Gecko</b>（Firefox・従来）</td>
+      <td><code>compositionend</code> → <code>input</code></td>
+      <td><code>false</code></td>
+      <td>w3c/uievents #202 / Bugzilla 1305387</td>
+    </tr>
+    <tr>
+      <td><b>Gecko</b>（2025-01 の Intent to Ship）</td>
+      <td><code>input</code>(true) → <code>compositionend</code> → <code>input</code>(false)</td>
+      <td>両方飛ぶ</td>
+      <td>mozilla dev-platform</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p class="src">出典: <a href="https://github.com/w3c/uievents/issues/202">w3c/uievents #202 “Event order between compositionend and input”</a>（2018-04-21、現在も Open） ／ <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1305387">Bugzilla 1305387</a> ／ <a href="https://groups.google.com/a/mozilla.org/g/dev-platform/c/yAbeVQR2D4Y">Intent to ship: Dispatch <code>input</code> event before <code>compositionend</code></a>（2025-01-16）</p>
+
+<p>Firefox の 2025 年の提案が興味深いのは、<b>Chrome に合わせるのではなく、両方を出す</b>という解決を選んでいる点です。Chrome 互換のために <code>compositionend</code> の前に冗長な <code>input</code> を足しつつ、従来の <code>isComposing: false</code> な <code>input</code> も残す。互換性のために重複を許容した、いかにも Web らしい決着です。</p>
+
+<div class="callout unverified">
+  <span class="label">未検証</span>
+  <p><b>Firefox と Safari の実挙動は、この場では計測していません。</b> CDP の <code>Input.imeSetComposition</code> は Chrome 専用で、他エンジンでは変換セッションを合成できないためです。上表の Gecko / WebKit 行は仕様議論とバグトラッカーからの引用です。</p>
+  <p>特に <b>2025-01 の Firefox Intent to Ship がどのバージョンで出荷されたか（そもそも出荷されたか）は特定できませんでした。</b> Bugzilla 1305387 は今も Open のままです。確かめるには、実機の Firefox で本物の IME を使って上と同じハーネスを開き、イベント順を目で見るのが確実です。</p>
+</div>
+
+<div class="callout unverified">
+  <span class="label">未検証（もうひとつ）</span>
+  <p>今回の計測は CDP でイベントを<b>合成</b>したものであり、macOS の日本語入力そのものを駆動したわけではありません。<code>compositionupdate</code> → <code>beforeinput</code> → <code>input</code> という並びは、Blink の過去の告知（「beforeinput を compositionupdate の<b>前</b>に出す」）とは逆に見えます。Chrome 152 の実挙動としてはこの並びですが、実 IME で完全に同じ並びになるかは実機確認が要ります。</p>
+</div>
+
+<h3>失敗モードのまとめ</h3>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>やりたいこと</th><th>やりがちな書き方</th><th>何が起きるか</th><th>正しい置き場所</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Enter で送信</td>
+      <td><code>if (e.key === 'Enter') submit()</code></td>
+      <td>変換を確定しようとした Enter で送信される</td>
+      <td><code>keydown</code> + <code>isComposing</code> ガード</td>
+    </tr>
+    <tr>
+      <td>確定時に値を正規化</td>
+      <td><code>onChange</code> で <code>!isComposing</code> のとき変換</td>
+      <td><b>一度も発火しない</b>（Chrome）</td>
+      <td><code>onCompositionEnd</code></td>
+    </tr>
+    <tr>
+      <td>確定時に値を正規化</td>
+      <td><code>onBlur</code> だけで変換</td>
+      <td>打っている間ずっと変換されない。フォーカスを外すまで直らない</td>
+      <td><code>onCompositionEnd</code> ＋ 貼り付け用に <code>onBlur</code> も</td>
+    </tr>
+    <tr>
+      <td>入力の検証</td>
+      <td><code>mode: 'onChange'</code> でそのまま検証</td>
+      <td>未確定の <code>ｚ</code> <code>ずｍ</code> にエラーが出て点滅する</td>
+      <td>変換中は<b>表示だけ</b>抑制する</td>
+    </tr>
+    <tr>
+      <td>未確定文字列を読む</td>
+      <td><code>compositionupdate</code> で <code>target.value</code></td>
+      <td>1 ステップ古い値が取れる</td>
+      <td><code>e.data</code> を読む</td>
+    </tr>
+    <tr>
+      <td>確定を検知する</td>
+      <td><code>compositionend</code> ＝ 確定とみなす</td>
+      <td>Esc による<b>取り消し</b>も同じイベントで来る</td>
+      <td><code>e.data</code> が空のケースを考慮する</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout unverified">
+  <span class="label">未検証（レガシー知識）</span>
+  <p><code>isComposing</code> が無かった時代は、<b><code>keydown</code> の <code>keyCode</code> が 229 かどうか</b>で変換中を判定する手法が広く使われていました。今回は合成イベントで <code>windowsVirtualKeyCode: 13</code> を指定して送っているため、この 229 は再現できず<b>計測していません</b>。現在のコードで使う理由はありませんが、古いコードで <code>229</code> を見かけたらこの手法です。</p>
+</div>
+
+<h2 id="s5"><span class="num">5</span>このコードベースでは</h2>
+
+<p>zumen-fe を grep すると、composition 系の API は <b>24 ファイル</b>で使われています。中身を読むと、用途はきれいに 2 つに分かれていました。</p>
+
+<h3>パターン A — Enter とセル移動を守るガード（多数派）</h3>
+
+<p>表形式の入力 UI が多いこのアプリでは、変換中の Enter / Tab が「セル移動」として解釈されてしまう事故を防ぐのが主用途です。2 つの書き方が併存しています。</p>
+
+<h4>A-1. <code>e.nativeEvent.isComposing</code> を直接読む</h4>
+
+<pre><code><span class="tok-c">// src/components/forms/input/SuggestionDropdown.tsx:151</span>
+<span class="tok-k">const</span> handleKeyDown = <span class="tok-f">useCallback</span>((e) => {
+  <span class="tok-k">if</span> (e.nativeEvent.isComposing) {
+    <span class="tok-k">if</span> (onKeyDown) <span class="tok-f">onKeyDown</span>(e)
+    <span class="tok-k">return</span>            <span class="tok-c">// 候補ドロップダウンの矢印キー操作より IME を優先する</span>
+  }
+  <span class="tok-c">// ArrowDown / Enter などの処理…</span>
+})</code></pre>
+
+<p>ハンドラが 1 つで済み、React の state を増やさない。<b>キーイベントだけを見たいならこれが最小です。</b></p>
+
+<h4>A-2. <code>isComposingRef</code> に自分で記録する</h4>
+
+<pre><code><span class="tok-c">// src/features/shared/transaction_document_modal/.../TableCellTextInput.tsx:113,290,445</span>
+<span class="tok-k">const</span> isComposingRef = <span class="tok-f">useRef</span>(<span class="tok-k">false</span>)
+
+<span class="tok-c">// keydown 側</span>
+<span class="tok-k">if</span> (isComposingRef.current) {
+  <span class="tok-c">// IME入力中はセル移動等でフォーカスが外れないようにする</span>
+  e.<span class="tok-f">stopPropagation</span>()
+}
+
+<span class="tok-c">// JSX 側</span>
+&lt;Input
+  onCompositionStart={() => (isComposingRef.current = <span class="tok-k">true</span>)}
+  onCompositionEnd={() => (isComposingRef.current = <span class="tok-k">false</span>)}
+/&gt;</code></pre>
+
+<p>こちらは <b>keydown 以外のイベント（親テーブルの監視、blur など）からも変換中かどうかを知りたい</b>ときの書き方です。<code>useRef</code> なので再レンダリングを起こしません。同じファイルで 4 つの Input に同じ 2 行が付いています。</p>
+
+<div class="callout">
+  <span class="label">使い分け</span>
+  <p><b>キーイベントの中だけで判定が完結するなら A-1</b>（<code>e.nativeEvent.isComposing</code>）。<b>別のイベントハンドラから参照したいなら A-2</b>（<code>isComposingRef</code>）。<code>useState</code> にしている箇所（<code>InputCellStringType.tsx:94</code>）もありますが、変換中かどうかで<b>描画が変わらない</b>なら <code>useRef</code> の方が無駄な再レンダリングを避けられます。</p>
+</div>
+
+<h3>パターン B — 確定時に値を正規化する（取引先の読み（カナ）欄）</h3>
+
+<p>もうひとつの用途が、今日ちょうど実装した「ひらがなを打ったら全角カタカナに直す」欄です。ここでは <code>compositionend</code> を<b>値の書き換え</b>と<b>エラー表示の抑制</b>の両方に使っています。</p>
+
+<pre><code><span class="tok-c">// src/views/settings/client_settings/.../ClientForm.tsx:87-131</span>
+<span class="tok-k">const</span> [isNameKanaComposing, setIsNameKanaComposing] = <span class="tok-f">useState</span>(<span class="tok-k">false</span>)
+
+<span class="tok-c">// 変換確定の瞬間に全角カタカナへ直す</span>
+<span class="tok-k">const</span> onNameKanaCompositionEnd = <span class="tok-f">useCallback</span>((event) => {
+  <span class="tok-f">setIsNameKanaComposing</span>(<span class="tok-k">false</span>)
+  <span class="tok-f">alignNameKanaDisplay</span>(event.currentTarget.value)
+}, [alignNameKanaDisplay])
+
+<span class="tok-c">// 貼り付けなど IME を経由しない入力もあるため、blur でも直す</span>
+<span class="tok-k">const</span> onNameKanaBlur = <span class="tok-f">useCallback</span>((event) => {
+  <span class="tok-f">alignNameKanaDisplay</span>(event.target.value)
+}, [alignNameKanaDisplay])
+
+<span class="tok-c">// 変換中はエラーを「表示しない」だけ。検証自体は止めない</span>
+<span class="tok-k">const</span> nameKanaErrorMessage = <span class="tok-f">useMemo</span>(
+  () => (isNameKanaComposing ? <span class="tok-k">undefined</span> : errors.nameKana?.message),
+  [isNameKanaComposing, errors.nameKana?.message]
+)</code></pre>
+
+<p>この 3 つ目のブロックには、設計上の判断が入っています。抑制しているのは<b>エラーの表示だけ</b>で、保存ボタンの活性（<code>isDisabled: !isValid</code>）には触っていません。</p>
+
+<div class="callout ok">
+  <span class="label">なぜボタンの活性は抑制しないのか</span>
+  <p>変換中だけ古い <code>isValid</code> を保持すれば、ボタンのちらつきも消せます。しかしそれは、<b>他の欄が invalid な状態でも保存を押せてしまう</b>可能性を作ります。エラー表示は「誤った情報を見せる」ので抑制する価値がありますが、ボタンの活性は常に現在の値に対して正しい。<b>見た目のちらつきより、押せてはいけないボタンが押せる方が重い。</b>だから片方だけ抑制しています。</p>
+</div>
+
+<div class="callout warn">
+  <span class="label">この欄で踏んだ落とし穴</span>
+  <p>最初の実装は <b><code>onBlur</code> だけ</b>で変換していました。jsdom のテストは通り、Playwright の <code>fill()</code> でも動いた。しかし実機で日本語入力を使うと<b>まったく変換されません</b>でした。理由はこの記事の事実 1 のとおりで、IME 経由の入力では確定後に <code>input</code> が来ず、フォーカスを外すまで一度も変換のきっかけが訪れないからです。<br><b>jsdom も <code>fill()</code> も composition イベントを出さないので、このバグはテストでは絶対に見つかりません。</b></p>
+</div>
+
+<h2 id="s6"><span class="num">6</span>理解度チェック（5 問）</h2>
+
+<p>どれも「仕組み」の節で実測した内容から出しています。引っかけではありませんが、なんとなく読んだだけでは正解できないはずです。</p>
+
+<div id="quiz"></div>
+<div class="score" id="score">回答すると、ここに結果が出ます</div>
+
+<footer>
+  <p><b>出典一覧</b></p>
+  <ul>
+    <li>仕様: <a href="https://www.w3.org/TR/uievents/">W3C UI Events</a> — §3.6.2 Composition Event Order、<code>isComposing</code> の定義、Bubbles / Cancelable のテーブル</li>
+    <li>リファレンス: <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/compositionend_event">MDN — Element: compositionend event</a>（“completes or cancels” の記述）</li>
+    <li>ブラウザ差の議論: <a href="https://github.com/w3c/uievents/issues/202">w3c/uievents #202</a>（2018-04-21、Open） ／ <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1305387">Bugzilla 1305387</a>（Open） ／ <a href="https://groups.google.com/a/mozilla.org/g/dev-platform/c/yAbeVQR2D4Y">Mozilla Intent to Ship</a>（2025-01-16）</li>
+    <li>React: 公式ドキュメント <code>react-dom/components/common.md</code>（<code>onCompositionStart/Update/End</code>）および <code>input.md</code>（<code>onChange</code> は “Behaves like the browser input event”）</li>
+    <li>実測: HeadlessChrome 152.0.0.0 / macOS。CDP <code>Input.imeSetComposition</code> + <code>Input.insertText</code> + <code>Input.dispatchKeyEvent</code> で駆動、素の <code>&lt;input&gt;</code> に全イベントリスナを張って記録</li>
+    <li>コードベース: <code>src/</code> 配下 24 ファイル。引用は <code>SuggestionDropdown.tsx:151</code> / <code>TableCellTextInput.tsx:113,290,445</code> / <code>InputCellStringType.tsx:94</code> / <code>ClientForm.tsx:87-131</code></li>
+  </ul>
+</footer>
+
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    q: 'Chrome で「ずめーん」と打って「ズメーン」に変換確定したとき、確定時に飛ぶ <code>input</code> イベントの <code>isComposing</code> はどうなっていたか？',
+    opts: [
+      { t: '<code>true</code>。しかも <code>compositionend</code> はその <b>後</b>に来る', ok: true,
+        fb: '正解です。実測の行 22 → 23 がこの並びでした。確定時の input も composition セッションの内側で起きるので isComposing は true のままです。' },
+      { t: '<code>false</code>。確定した瞬間に composition は終わっているため', ok: false,
+        fb: '直感的にはそう思えますが、実測では true でした。isComposing は「compositionstart の後、compositionend の前」で true になり、確定時の input はまだ compositionend より前にいます。' },
+      { t: '<code>undefined</code>。<code>input</code> イベントは <code>isComposing</code> を持たない', ok: false,
+        fb: 'isComposing を持たないのは CompositionEvent の方です。input / beforeinput は InputEvent なので持っています。' },
+      { t: '最初の変換では <code>true</code>、2 回目以降は <code>false</code>', ok: false,
+        fb: '回数による違いはありません。実測では 6 回の input すべてが true でした。' }
+    ]
+  },
+  {
+    q: '「<code>onChange</code> の中で <code>e.nativeEvent.isComposing</code> が <code>false</code> のときだけ全角カタカナに変換する」というコードを Chrome で動かすと、日本語入力に対して何が起きるか？',
+    opts: [
+      { t: '一度も発火しない', ok: true,
+        fb: '正解です。変換中の input はすべて isComposing: true、確定時の input も true、そして compositionend の後に input は来ない。Chrome では該当する瞬間が存在しません。' },
+      { t: '確定のたびに 1 回だけ発火する', ok: false,
+        fb: 'Firefox の従来の順序（compositionend → input(false)）ならそうなります。しかし Chrome では確定後の input が来ないため、発火しません。この差がまさに w3c/uievents #202 の論点です。' },
+      { t: '打鍵のたびに発火してしまい、変換が壊れる', ok: false,
+        fb: '逆です。打鍵のたびに飛ぶ input は isComposing: true なので、このガードに弾かれます。問題は「弾かれすぎて何も残らない」ことです。' },
+      { t: '最初の 1 打鍵だけ発火する', ok: false,
+        fb: '最初の打鍵の input も isComposing: true です（実測の行 4）。' }
+    ]
+  },
+  {
+    q: '<code>compositionupdate</code> のハンドラで <code>e.currentTarget.value</code> を読むと何が取れるか？',
+    opts: [
+      { t: '1 ステップ前の古い値。最新は <code>e.data</code> にある', ok: true,
+        fb: '正解です。実測の行 5 で compositionupdate の data は "ず" なのに value はまだ "ｚ" でした。DOM に反映されるのは次の input のタイミングです。' },
+      { t: '最新の未確定文字列。<code>e.data</code> と常に一致する', ok: false,
+        fb: 'compositionend では一致しますが、compositionupdate では一致しません。value の更新は compositionupdate より後に起きます。' },
+      { t: '空文字。変換中は value にアクセスできない', ok: false,
+        fb: '変換中でも value は読めます。IME の下書きも value に入っているのがこの仕組みの特徴です。' },
+      { t: '確定後の文字列。ブラウザが先読みして入れている', ok: false,
+        fb: '先読みは起きません。確定後の文字列が value に入るのは、確定時の input イベントのタイミングです。' }
+    ]
+  },
+  {
+    q: '変換中に押した Enter と、確定後に押した Enter を、コード側で区別する手がかりは？',
+    opts: [
+      { t: '<code>keydown</code> の <code>isComposing</code>。変換中は <code>true</code>、確定後は <code>false</code>', ok: true,
+        fb: '正解です。実測の行 5（true）と行 11（false）がこれです。e.key はどちらも "Enter" なので、区別できるのは isComposing だけです。' },
+      { t: '<code>e.key</code> の値が変わる（変換中は <code>Process</code> になる）', ok: false,
+        fb: '実測ではどちらも key="Enter" でした。key で区別することはできません。' },
+      { t: '変換中は <code>keydown</code> 自体が飛んでこない', ok: false,
+        fb: '飛んできます（実測の行 5）。飛んでくるからこそ、区別せずに処理すると事故が起きます。' },
+      { t: '<code>compositionend</code> が先に飛ぶので、フラグを立てておけば分かる', ok: false,
+        fb: 'それは isComposingRef パターンで、実際にこのリポジトリでも使われている有効な手段です。ただし「変換中の Enter」は compositionend より前に来る（行 5 → 行 10）ので、自分でフラグを持つ場合は compositionStart で立てる必要があります。keydown の isComposing を読む方が直接的です。' }
+    ]
+  },
+  {
+    q: '<code>compositionend</code> が飛んできた。このとき確実に言えることは？',
+    opts: [
+      { t: '変換セッションが終わった。ただし<b>確定とは限らず</b>、Esc による取り消しでも飛ぶ', ok: true,
+        fb: '正解です。MDN の定義は "completes or cancels" です。取り消しの場合 e.data は空文字になるので、data を無条件に信用して値を書き換えると入力欄が壊れます。' },
+      { t: 'ユーザーが文字を確定した。<code>e.data</code> には必ず確定文字列が入っている', ok: false,
+        fb: '取り消し（Esc）でも同じイベントが飛び、その場合 e.data は空になります。「compositionend = 確定」と読むのは半分だけ正しい理解です。' },
+      { t: 'この後に必ず <code>input</code> イベントが 1 回飛んでくる', ok: false,
+        fb: 'Chrome では飛んできません（実測の行 23 が最後）。Firefox の従来挙動では飛びます。ブラウザによって違う、というのがこの部分の要点です。' },
+      { t: '入力欄からフォーカスが外れた', ok: false,
+        fb: 'フォーカスは外れません。だからこそ「blur を待つ」設計だと、変換確定のタイミングで何もできないのです。' }
+    ]
+  }
+];
+
+const quizEl = document.getElementById('quiz');
+const scoreEl = document.getElementById('score');
+let answered = 0, correct = 0;
+
+QUESTIONS.forEach((item, qi) => {
+  const box = document.createElement('div');
+  box.className = 'quiz';
+  const q = document.createElement('p');
+  q.className = 'q';
+  q.innerHTML = '<span class="qn">Q' + (qi + 1) + '</span>' + item.q;
+  box.appendChild(q);
+
+  const fb = document.createElement('div');
+  fb.className = 'fb';
+
+  item.opts.forEach((opt) => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.type = 'button';
+    btn.innerHTML = opt.t;
+    btn.addEventListener('click', () => {
+      if (box.dataset.done) return;
+      box.dataset.done = '1';
+      answered++;
+      if (opt.ok) correct++;
+      Array.from(box.querySelectorAll('.opt')).forEach((b, bi) => {
+        b.disabled = true;
+        if (item.opts[bi].ok) b.classList.add('correct');
+      });
+      if (!opt.ok) btn.classList.add('wrong');
+      fb.className = 'fb show ' + (opt.ok ? 'good' : 'bad');
+      fb.innerHTML = (opt.ok ? '&#9989; ' : '&#10060; ') + opt.fb;
+      updateScore();
+    });
+    box.appendChild(btn);
+  });
+
+  box.appendChild(fb);
+  quizEl.appendChild(box);
+});
+
+function updateScore() {
+  if (answered < QUESTIONS.length) {
+    scoreEl.innerHTML = '回答済み <b>' + answered + '</b> / ' + QUESTIONS.length;
+    return;
+  }
+  let msg;
+  if (correct === 5) msg = '&#127881; 完璧です。実測ログを読み切れています。';
+  else if (correct >= 3) msg = '&#128077; いい線です。間違えた問題のフィードバックをもう一度どうぞ。';
+  else msg = '&#128218; 「仕組み」の節の実測タイムラインをもう一度眺めてみてください。';
+  scoreEl.innerHTML = '<b>' + correct + ' / ' + QUESTIONS.length + '</b> 正解<br>' + msg;
+}
+</script>
+</body>
+</html>
