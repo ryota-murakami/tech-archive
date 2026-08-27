@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How a truncated chunk-ident hash made large Turbopack builds fail at random, why widening it from 7 to 13 base38 chars fixed it, and why 700 snapshot files had to change." />
+<meta name="archive:title" content="Six Characters: How a Truncated Hash Broke Large Turbopack Builds" />
+<meta name="archive:published" content="2026-08-27" />
+<meta name="archive:type" content="Explain Diff" />
+<meta name="archive:source" content="vercel/next.js · #97945" />
+<meta name="archive:category" content="Turbopack" />
+<meta name="archive:category" content="Next.js" />
+<meta name="archive:category" content="Bundlers" />
+<meta name="archive:category" content="Hashing" />
+<meta name="archive:reading-minutes" content="16" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="&hash[..7] → &hash[..] // 13 base38 chars" />
+<title>Six Characters: How a Truncated Hash Broke Large Turbopack Builds</title>
+<style>
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #4a4a4a;
+  --ink-faint: #767676;
+  --rule: #e2e0da;
+  --bg: #fdfcf9;
+  --panel: #f5f3ed;
+  --accent: #0b6b5b;
+  --accent-soft: #e3f0ed;
+  --warn: #a8590a;
+  --warn-soft: #fdf1e0;
+  --bad: #a32d2d;
+  --bad-soft: #fbeaea;
+  --good: #2c6e3f;
+  --good-soft: #e8f3ea;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Charter, "Bitstream Charter", "Iowan Old Style", Georgia, serif;
+  font-size: 18px;
+  line-height: 1.65;
+}
+.wrap { max-width: 780px; margin: 0 auto; padding: 0 22px 120px; }
+header.masthead {
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 34px;
+  padding: 54px 0 30px;
+}
+header.masthead .kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+h1 { font-size: 2.15rem; line-height: 1.18; margin: 0 0 14px; font-weight: 600; letter-spacing: -0.01em; }
+header.masthead .sub { color: var(--ink-soft); font-size: 1.06rem; margin: 0; }
+.meta {
+  margin-top: 22px; font-size: 0.84rem; color: var(--ink-faint);
+  font-family: var(--mono); line-height: 1.9;
+}
+.meta a { color: var(--accent); }
+h2 {
+  font-size: 1.6rem; margin: 62px 0 6px; font-weight: 600;
+  padding-top: 20px; border-top: 1px solid var(--rule); letter-spacing: -0.01em;
+}
+h3 { font-size: 1.2rem; margin: 38px 0 10px; font-weight: 600; }
+h4 { font-size: 1rem; margin: 26px 0 8px; font-weight: 600; color: var(--ink-soft); }
+p { margin: 0 0 17px; }
+a { color: var(--accent); }
+ul, ol { margin: 0 0 17px; padding-left: 26px; }
+li { margin-bottom: 8px; }
+code {
+  font-family: var(--mono); font-size: 0.85em;
+  background: var(--panel); padding: 1px 5px; border-radius: 3px;
+}
+pre {
+  font-family: var(--mono); font-size: 13px; line-height: 1.55;
+  background: #262421; color: #eceae4;
+  padding: 16px 18px; border-radius: 6px; overflow-x: auto;
+  white-space: pre; margin: 0 0 20px;
+}
+pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+pre .add { color: #9fdcb0; display: block; }
+pre .del { color: #f2a3a3; display: block; }
+pre .cmt { color: #9a978f; }
+pre .hl { color: #f5d98a; }
+
+/* --- table of contents --- */
+nav.toc {
+  background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 20px 24px; margin: 0 0 20px;
+}
+nav.toc h2 {
+  margin: 0 0 10px; padding: 0; border: 0;
+  font-size: 0.78rem; letter-spacing: 0.09em; text-transform: uppercase;
+  font-family: var(--mono); color: var(--ink-faint);
+}
+nav.toc ol { margin: 0; padding-left: 20px; font-size: 0.95rem; }
+nav.toc li { margin-bottom: 5px; }
+nav.toc ol ol { margin-top: 5px; font-size: 0.92em; color: var(--ink-faint); }
+
+/* --- callouts --- */
+.callout {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: 14px 18px; margin: 0 0 20px; border-radius: 0 6px 6px 0;
+  font-size: 0.96rem;
+}
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout.bad  { border-left-color: var(--bad);  background: var(--bad-soft); }
+.callout.good { border-left-color: var(--good); background: var(--good-soft); }
+.callout p:last-child { margin-bottom: 0; }
+.callout .label {
+  display: block; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 6px; opacity: 0.8;
+}
+details.skippable {
+  border: 1px solid var(--rule); border-radius: 8px;
+  padding: 12px 18px; margin: 0 0 22px; background: #fff;
+}
+details.skippable summary {
+  cursor: pointer; font-weight: 600; font-size: 0.98rem; color: var(--accent);
+}
+details.skippable[open] summary { margin-bottom: 12px; }
+
+/* --- diagram family A: the name pipeline strip --- */
+.strip { margin: 0 0 8px; }
+.strip-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px;
+}
+.strip-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: stretch; }
+.seg {
+  font-family: var(--mono); font-size: 12px; line-height: 1.35;
+  padding: 7px 9px; border-radius: 4px; border: 1px solid transparent;
+  word-break: break-all; display: flex; flex-direction: column; justify-content: center;
+}
+.seg .tag {
+  display: block; font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase;
+  opacity: 0.72; margin-bottom: 2px; font-weight: 600;
+}
+.seg-head  { background: #ece4f7; border-color: #cdb9e6; color: #4a2b6b; }
+.seg-path  { background: #e4eef7; border-color: #b8cfe6; color: #1f4a6b; }
+.seg-hash  { background: #e3f0ed; border-color: #a9d3c9; color: #0b6b5b; }
+.seg-hashx { background: #fbeaea; border-color: #e8b4b4; color: #8f2020; text-decoration: line-through; text-decoration-thickness: 2px; }
+.seg-ext   { background: var(--panel); border-color: var(--rule); color: var(--ink-soft); }
+.seg-drop  { background: #f0eeea; border-color: #ddd9d1; color: #8a867e; }
+.strip-note { font-size: 0.86rem; color: var(--ink-faint); margin: 4px 0 22px; }
+
+/* --- diagram family B: buckets --- */
+.buckets { margin: 0 0 10px; }
+.bucket-row { display: flex; gap: 4px; align-items: flex-end; margin-bottom: 8px; flex-wrap: wrap; }
+.bucket {
+  flex: 1 1 40px; min-width: 34px; border: 1px solid var(--rule);
+  border-radius: 4px 4px 0 0; background: #fff; padding: 4px 3px 5px;
+  text-align: center; font-family: var(--mono); font-size: 10px; color: var(--ink-faint);
+}
+.bucket .pips { display: flex; flex-direction: column-reverse; gap: 2px; align-items: center; min-height: 46px; justify-content: flex-start; }
+.pip { width: 14px; height: 9px; border-radius: 2px; background: #b8cfe6; display: block; }
+.pip.clash { background: var(--bad); }
+.bucket.clash { border-color: var(--bad); background: var(--bad-soft); }
+.bucket .cap { display: block; margin-top: 4px; }
+
+/* --- tables --- */
+table { width: 100%; border-collapse: collapse; margin: 0 0 22px; font-size: 0.9rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+tr.emph td { background: var(--bad-soft); font-weight: 600; }
+tr.emphgood td { background: var(--good-soft); }
+
+/* --- quiz --- */
+.q {
+  border: 1px solid var(--rule); border-radius: 8px; background: #fff;
+  padding: 20px 22px; margin: 0 0 20px;
+}
+.q .qnum {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+}
+.q .qtext { font-weight: 600; margin-bottom: 14px; }
+.opt {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 0.95rem;
+  background: var(--bg); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 10px 14px; margin-bottom: 8px; cursor: pointer; transition: background 0.12s, border-color 0.12s;
+  color: var(--ink);
+}
+.opt:hover:not(:disabled) { background: var(--panel); border-color: #c9c5bb; }
+.opt:disabled { cursor: default; }
+.opt.correct { background: var(--good-soft); border-color: var(--good); }
+.opt.wrong { background: var(--bad-soft); border-color: var(--bad); }
+.opt .mark { font-family: var(--mono); font-weight: 700; margin-right: 8px; }
+.fb {
+  display: none; margin-top: 12px; padding: 12px 15px; border-radius: 6px;
+  font-size: 0.93rem; line-height: 1.55;
+}
+.fb.show { display: block; }
+.fb.ok { background: var(--good-soft); border-left: 3px solid var(--good); }
+.fb.no { background: var(--bad-soft); border-left: 3px solid var(--bad); }
+.score {
+  font-family: var(--mono); font-size: 0.9rem; color: var(--ink-faint);
+  border-top: 1px solid var(--rule); padding-top: 16px; margin-top: 26px;
+}
+@media (max-width: 620px) {
+  body { font-size: 17px; }
+  .wrap { padding: 0 16px 80px; }
+  h1 { font-size: 1.7rem; }
+  h2 { font-size: 1.35rem; }
+  pre { font-size: 11.5px; }
+  .bucket { min-width: 26px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div class="kicker">vercel/next.js &middot; PR #97945</div>
+  <h1>Six Characters</h1>
+  <p class="sub">How a truncated hash made large Turbopack builds fail at random, why the fix is three lines,
+  and why it took seven hundred files to land.</p>
+  <div class="meta">
+    title &nbsp;&nbsp; Turbopack: widen the chunk ident hash from 7 to 13 base38 chars<br>
+    author &nbsp; Tobias Koppers (sokra) &middot; branch <code>codex/pr-97766-rebase-canary</code> &rarr; <code>canary</code><br>
+    size &nbsp;&nbsp;&nbsp; 711 files, +3,409 / &minus;3,402 &nbsp;(of which <strong>2 files</strong> are the change)<br>
+    status &nbsp; open, approved by <code>mischnic</code> &middot; closes #97766, fixes #97765 and #96976<br>
+    link &nbsp;&nbsp;&nbsp; <a href="https://github.com/vercel/next.js/pull/97945">github.com/vercel/next.js/pull/97945</a>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#background">Background</a>
+      <ol>
+        <li><a href="#deep">What a bundler is doing when it names a file</a> <em>(skippable)</em></li>
+        <li><a href="#narrow">The three pieces that matter</a></li>
+      </ol>
+    </li>
+    <li><a href="#intuition">Intuition</a>
+      <ol>
+        <li><a href="#job">What the hash suffix is actually for</a></li>
+        <li><a href="#base38">Base38, and the digit that was never free</a></li>
+        <li><a href="#birthday">The birthday problem, with real numbers</a></li>
+        <li><a href="#blame">Why it always looked like your branch's fault</a></li>
+      </ol>
+    </li>
+    <li><a href="#code">The Code</a>
+      <ol>
+        <li><a href="#thechange">The change itself</a></li>
+        <li><a href="#snapshots">The other 709 files</a></li>
+        <li><a href="#shorter">Where the names got <em>shorter</em></a></li>
+        <li><a href="#untouched">The truncation that was left alone</a></li>
+        <li><a href="#residue">Loose ends</a></li>
+      </ol>
+    </li>
+    <li><a href="#quiz">Quiz</a></li>
+  </ol>
+</nav>
+
+<p>Every so often a bug report arrives that is really a story about arithmetic. Somebody wrote a comment
+claiming a number, the number was wrong, nothing noticed for years because the systems were small, and
+then the systems got big. This is one of those.</p>
+
+<p>The symptom is a Turbopack build that dies with a message giving no hint of where to look:</p>
+
+<pre>Two or more assets with different content were emitted to the same output path</pre>
+
+<p>The cause is six missing characters in a filename. The fix deletes two lines and adds one. Getting
+there requires understanding what those characters were carrying.</p>
+
+
+<h2 id="background">1. Background</h2>
+
+<h3 id="deep">1.1 What a bundler is doing when it names a file <em>(skip if you know)</em></h3>
+
+<details class="skippable">
+<summary>Expand: chunks, output paths, and why naming is hard</summary>
+
+<p>Your application is thousands of small source files. The browser does not want thousands of small
+files, and neither does a serverless function cold-start. So a bundler &mdash; webpack, Rollup, esbuild,
+or in this case <strong>Turbopack</strong>, the Rust bundler that ships as the default in Next.js &mdash;
+groups modules into a smaller number of larger files called <strong>chunks</strong>, and writes those
+chunks to disk.</p>
+
+<p>Each chunk needs a name. That name has three jobs at once, and they pull against each other:</p>
+
+<ul>
+  <li><strong>Unique.</strong> Two chunks with different contents must never land on the same path.
+  If they do, one silently overwrites the other and you ship a broken app &mdash; or, if the bundler is
+  careful, the build fails loudly. Turbopack is careful.</li>
+  <li><strong>Deterministic.</strong> The same input must produce the same name on every machine, every
+  run. Otherwise caching breaks, and so does any test that compares two builds.</li>
+  <li><strong>Readable.</strong> When you are staring at a flamegraph or a network waterfall,
+  <code>app_dashboard_page_3f2a.js</code> tells you something and <code>c7f19b2e.js</code> does not.</li>
+</ul>
+
+<p>Uniqueness wants a long hash. Readability wants a short human-legible path. Almost every bundler
+resolves this the same way: <em>concatenate them.</em> Take a readable prefix derived from the source
+path, append a hash suffix that carries whatever the path leaves out, and hope the combination is
+unique.</p>
+
+<p>That "whatever the path leaves out" is doing a lot of work, and it is where this bug lives.</p>
+
+<p>One more concept you will need. In Turbopack, the thing being named is not a file, it is an
+<strong>ident</strong> &mdash; a structured identity record for an asset. Two chunks can be built from
+the same directory of source files and still be genuinely different assets: different subsets of
+modules, different rendering layers (server vs. client), different tree-shaken slices of the same
+module. The ident is what distinguishes them, and the filename has to encode enough of the ident that
+distinct idents get distinct files.</p>
+</details>
+
+<h3 id="narrow">1.2 The three pieces that matter</h3>
+
+<p>Three functions, spread across three crates, form the whole story. Read them in this order and the
+bug becomes obvious.</p>
+
+<h4>Piece one: <code>AssetIdent</code> and what it hashes</h4>
+
+<p>An ident lives in
+<code>turbopack/crates/turbopack-core/src/ident.rs</code> and holds eight fields:</p>
+
+<pre><code>pub struct AssetIdent {
+    pub path: FileSystemPath,           <span class="cmt">// where it came from</span>
+    pub query: RcStr,                   <span class="cmt">// ?foo=bar</span>
+    pub fragment: RcStr,                <span class="cmt">// #foo</span>
+    pub assets: Vec&lt;(RcStr, ResolvedVc&lt;AssetIdent&gt;)&gt;,  <span class="cmt">// nested idents</span>
+    pub modifiers: Vec&lt;RcStr&gt;,          <span class="cmt">// "async loader", "client chunks", ...</span>
+    pub parts: Vec&lt;ModulePart&gt;,         <span class="cmt">// tree-shaken slices</span>
+    pub layer: Option&lt;Layer&gt;,           <span class="cmt">// server / client / edge</span>
+    pub content_type: Option&lt;RcStr&gt;,    <span class="cmt">// for data: URLs</span>
+}</code></pre>
+
+<p>The method <code>output_name()</code> turns one of these into a filename. Its very first act is a
+destructuring pattern that is, quietly, the thesis of this entire PR:</p>
+
+<pre><code>let AssetIdent {
+    <span class="hl">path: _,</span>          <span class="cmt">// &lt;-- deliberately NOT hashed</span>
+    query, fragment, assets, modifiers, parts, layer, content_type,
+} = self;</code></pre>
+
+<div class="callout">
+<span class="label">Key concept</span>
+<p><strong>The path is not part of the hash.</strong> It is rendered directly into the readable prefix.
+Everything <em>else</em> about the ident goes into the hash. So the hash suffix has exactly one job:
+to separate idents that <strong>share a path</strong> and differ only in the other seven fields.</p>
+</div>
+
+<p>There is a second detail worth noticing. The function tracks a boolean, <code>has_hash</code>, set
+only if at least one of those seven fields is non-empty:</p>
+
+<pre><code>if has_hash {
+    let hash = encode_base38(hasher.finish());
+    <span class="del">// 7 base38 chars ~= 36 bits of collision resistance</span>
+    <span class="del">let truncated_hash = &amp;hash[..7];</span>
+    <span class="del">write!(name, "_{truncated_hash}")?;</span>
+}</code></pre>
+
+<p>A plain source module with no query, no modifiers, no layer gets <em>no suffix at all</em> &mdash; its
+path alone is its identity, and paths are already unique. So the population at risk of collision is
+precisely the set of assets that carry identity beyond their path. In a Next.js build, that population
+is dominated by one thing: chunks.</p>
+
+<h4>Piece two: how a chunk's ident is built</h4>
+
+<p>Now look at <code>EcmascriptChunk::ident()</code> in
+<code>turbopack/crates/turbopack-ecmascript/src/chunk/mod.rs</code>. It has to invent an identity for a
+chunk, which is not a file and has no natural path of its own. It does two things:</p>
+
+<pre><code><span class="cmt">// 1. path = the deepest common ancestor of every chunk item's path</span>
+let mut common_path = chunk_items.first().path;
+for chunk_item in chunk_items {
+    while !chunk_item.path.is_inside_or_equal(common_path) {
+        common_path = common_path.parent();   <span class="cmt">// walk up until it contains everything</span>
+    }
+}
+
+<span class="cmt">// 2. assets = one entry per chunk item -- this is what makes the chunk unique</span>
+let assets = chunk_items.map(|item| (rcstr!("chunk item"), item.content_ident()));
+
+let mut ident = AssetIdent::from_path(common_path);
+ident.assets.extend(assets);</code></pre>
+
+<p>Put the two pieces together and the shape of the problem appears. The <code>path</code> &mdash; the part
+that becomes readable and is <em>not</em> hashed &mdash; is a <strong>common ancestor directory</strong>.
+The <code>assets</code> list &mdash; the part that actually distinguishes one chunk from another &mdash;
+goes entirely into the hash.</p>
+
+<div class="callout warn">
+<span class="label">The collapse</span>
+<p>In a large App Router application, a chunk that draws modules from several routes has a common
+ancestor of <code>app/</code>. A chunk that also pulls something from <code>lib/</code> has a common ancestor of
+the project root. Tens of thousands of chunks therefore share a handful of readable prefixes, and
+the <em>only</em> thing keeping their output paths apart is the hash suffix.</p>
+</div>
+
+<h4>Piece three: the build's last line of defence</h4>
+
+<p>Turbopack does not silently let one asset overwrite another. In
+<code>crates/next-core/src/emit.rs</code>, when two assets resolve to the same output path, it compares
+their content. If the content is byte-identical it shrugs and writes once. If not, it writes both
+versions out under <code>node_root</code> as <code>&lt;content-hash&gt;.js</code> so you can diff them, and
+raises an error-severity issue:</p>
+
+<pre><code>"Two or more assets with different content were emitted to the same output path"</code></pre>
+
+<p>That is the message users were seeing. It is an honest message. It is also, as we are about to see, an
+almost perfectly unhelpful one.</p>
+
+
+<h2 id="intuition">2. Intuition</h2>
+
+<h3 id="job">2.1 What the hash suffix is actually for</h3>
+
+<p>Here is a real filename from the Turbopack test suite, taken apart. This strip is the diagram we
+will reuse for the rest of the piece &mdash; every filename in this story has these four parts.</p>
+
+<div class="strip">
+  <div class="strip-label">Before the PR &mdash; a chunk filename, disassembled</div>
+  <div class="strip-row">
+    <div class="seg seg-head"><span class="tag">head hash (4)</span>1jsg</div>
+    <div class="seg seg-path"><span class="tag">readable path</span>_tests_snapshot_basic-tree-shake_dynamic-import_input_index</div>
+    <div class="seg seg-hash"><span class="tag">ident hash (7)</span>_17se2p5</div>
+    <div class="seg seg-ext"><span class="tag">ext</span>.js</div>
+  </div>
+</div>
+<p class="strip-note">The blue segment comes from <code>path</code>, which is never hashed. The green
+segment is <code>encode_base38(hash_of_everything_else)</code>, truncated to seven characters. We will
+come back to the purple head hash in section 3.4.</p>
+
+<p>Now imagine two chunks in the same build. Both pull modules from under
+<code>app/</code>, so both have the same common-ancestor path. They contain different modules, so their
+<code>assets</code> lists differ, so their hashes differ. Good &mdash; that is the system working:</p>
+
+<div class="strip">
+  <div class="strip-label">Two distinct chunks, correctly separated</div>
+  <div class="strip-row">
+    <div class="seg seg-head"><span class="tag">head</span>1jsg</div>
+    <div class="seg seg-path"><span class="tag">same path</span>_app</div>
+    <div class="seg seg-hash"><span class="tag">hash A</span>_0qno3y-</div>
+    <div class="seg seg-ext">.js</div>
+  </div>
+  <div class="strip-row" style="margin-top:4px">
+    <div class="seg seg-head"><span class="tag">head</span>1jsg</div>
+    <div class="seg seg-path"><span class="tag">same path</span>_app</div>
+    <div class="seg seg-hash"><span class="tag">hash B</span>_210e6bp</div>
+    <div class="seg seg-ext">.js</div>
+  </div>
+</div>
+
+<p>Everything to the left of the green segment is identical. The seven green characters are carrying
+the entire distinction between these two files. If they ever match, the two chunks &mdash; different
+modules, different bytes &mdash; get the same output path and the build dies.</p>
+
+<p>So the question that decides whether large builds work is simply: <strong>how many distinct values can
+those seven characters take?</strong> The comment in the code said roughly 36 bits. It was wrong.</p>
+
+<h3 id="base38">2.2 Base38, and the digit that was never free</h3>
+
+<p>Turbopack encodes hashes in base 38, using the alphabet
+<code>0-9 a-z _ -</code>. The alphabet is chosen with some care &mdash; a comment in
+<code>base38.rs</code> notes that <code>~</code> and <code>.</code> are deliberately excluded because
+sequences like <code>~~</code> and <code>...</code> trip common Nginx hardening rules and enterprise WAFs,
+which then return 403 for your JavaScript.</p>
+
+<p>The encoder is fixed-width. It always emits exactly thirteen characters for a 64-bit hash, most
+significant digit first:</p>
+
+<pre><code>fn encode_base38_fixed&lt;const N: usize&gt;(mut n: u128) -> String {
+    let mut buf = [b'0'; N];
+    for i in (0..N).rev() {        <span class="cmt">// fill from the right...</span>
+        buf[i] = BASE38_CHARS[(n % 38) as usize];
+        n /= 38;
+    }                              <span class="cmt">// ...so buf[0] is the MOST significant digit</span>
+}</code></pre>
+
+<p>Why thirteen? Because you need thirteen base-38 digits to hold every 64-bit value:</p>
+
+<table>
+  <tr><th></th><th class="num">value</th><th class="num">as bits</th></tr>
+  <tr><td><code>38<sup>12</sup></code></td><td class="num">9,065,737,908,494,995,456</td><td class="num">62.97</td></tr>
+  <tr><td><code>2<sup>64</sup></code></td><td class="num">18,446,744,073,709,551,616</td><td class="num">64.00</td></tr>
+  <tr><td><code>38<sup>13</sup></code></td><td class="num">344,498,040,522,809,827,328</td><td class="num">68.22</td></tr>
+</table>
+
+<p>Twelve digits is not enough; thirteen is more than enough. And "more than enough" is the trap.
+Thirteen base-38 digits can express 68.22 bits of information, but the value only needs 64. There are
+<strong>4.22 bits of slack</strong>, and all of it sits in the leading digit.</p>
+
+<p>Concretely: <code>buf[0] = n / 38</code><sup>12</sup>, and since <code>2</code><sup><code>64</code></sup>
+is only about 2.03 &times; <code>38</code><sup><code>12</code></sup>, that leading digit can only ever be
+<code>0</code>, <code>1</code>, or <code>2</code>. Three values out of a possible thirty-eight.</p>
+
+<div class="callout bad">
+<span class="label">The arithmetic error</span>
+<p>Truncating to the first <em>k</em> characters keeps the <strong>high-order</strong> digits, which means
+you pay the slack immediately. The correct formula is not <code>k &times; log2(38)</code>; it is
+<code>64 &minus; (13 &minus; k) &times; log2(38)</code>. Every truncation loses those 4.22 bits before it
+loses anything else.</p>
+</div>
+
+<p>Applying that to the actual code:</p>
+
+<table>
+  <tr>
+    <th>truncation</th><th class="num">distinct values</th>
+    <th class="num">real bits</th><th class="num">comment claimed</th>
+  </tr>
+  <tr class="emph">
+    <td><code>&amp;hash[..7]</code> &mdash; the ident hash</td>
+    <td class="num">6,126,580,479</td><td class="num">32.51</td><td class="num">"&asymp; 36"</td>
+  </tr>
+  <tr>
+    <td><code>&amp;hash[..4]</code> &mdash; the head hash</td>
+    <td class="num">111,653</td><td class="num">16.77</td><td class="num">"&asymp; 21"</td>
+  </tr>
+  <tr class="emphgood">
+    <td><code>hash</code> &mdash; after this PR</td>
+    <td class="num">18,446,744,073,709,551,616</td><td class="num">64.00</td><td class="num">&mdash;</td>
+  </tr>
+</table>
+
+<p>Six billion looks like a comfortably large number. It is not, and the reason is the oldest trap in
+applied probability.</p>
+
+<h3 id="birthday">2.3 The birthday problem, with real numbers</h3>
+
+<p>You are not asking "will this <em>specific</em> chunk collide with that <em>specific</em> one?" You are
+asking "among the <em>n</em> chunks that share a readable prefix, will <em>any two</em> collide?" The
+number of pairs grows as <em>n</em><sup>2</sup>, so the probability of at least one collision is
+approximately</p>
+
+<pre>P(collision)  ~=  1 - exp( -n^2 / 2M )        where M = 6,126,580,479</pre>
+
+<p>Pictured with buckets &mdash; each bucket is one possible hash value, each pip is a chunk. With few
+chunks and many buckets, life is fine:</p>
+
+<div class="buckets">
+  <div class="strip-label">n small &mdash; plenty of room</div>
+  <div class="bucket-row">
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0000</span></div>
+    <div class="bucket"><div class="pips"></div><span class="cap">0001</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0002</span></div>
+    <div class="bucket"><div class="pips"></div><span class="cap">0003</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0004</span></div>
+    <div class="bucket"><div class="pips"></div><span class="cap">0005</span></div>
+    <div class="bucket"><div class="pips"></div><span class="cap">0006</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0007</span></div>
+  </div>
+</div>
+
+<div class="buckets">
+  <div class="strip-label">n large &mdash; two chunks land in bucket 0004, and the build fails</div>
+  <div class="bucket-row">
+    <div class="bucket"><div class="pips"><span class="pip"></span><span class="pip"></span></div><span class="cap">0000</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0001</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span><span class="pip"></span></div><span class="cap">0002</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0003</span></div>
+    <div class="bucket clash"><div class="pips"><span class="pip clash"></span><span class="pip clash"></span></div><span class="cap">0004</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0005</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span><span class="pip"></span></div><span class="cap">0006</span></div>
+    <div class="bucket"><div class="pips"><span class="pip"></span></div><span class="cap">0007</span></div>
+  </div>
+</div>
+<p class="strip-note">The buckets in the second row are not fuller because the hash is worse &mdash; the
+hash is the same. There are simply more chunks. The failure mode is a property of application size, and
+nothing else.</p>
+
+<p>Plugging in real chunk counts:</p>
+
+<table>
+  <tr><th>chunks sharing a prefix</th><th class="num">expected collisions</th><th class="num">P(build fails)</th></tr>
+  <tr><td>1,000</td><td class="num">0.0001</td><td class="num">0.01 %</td></tr>
+  <tr><td>10,000</td><td class="num">0.008</td><td class="num">0.81 %</td></tr>
+  <tr><td>34,000</td><td class="num">0.094</td><td class="num">9.0 %</td></tr>
+  <tr><td>69,000</td><td class="num">0.389</td><td class="num">32 %</td></tr>
+  <tr class="emph"><td>120,000</td><td class="num">1.175</td><td class="num">69 %</td></tr>
+</table>
+
+<p>Those bottom rows are not hypothetical. The PR cites two reports:</p>
+
+<ul>
+  <li><strong>#97765</strong> &mdash; a deterministic reproduction with roughly 120,000 chunks sharing one
+  prefix. It fails byte-identically on every run: same collided path, same rejected content hashes,
+  build after build.</li>
+  <li><strong>#96976</strong> &mdash; a production App Router application emitting about 69,000 server
+  chunks, with a measured failure rate near 9% per build. (9%, not 32%, because not every one of those
+  69,000 shares the <em>same</em> ancestor prefix &mdash; the birthday count applies within each
+  prefix group, and the groups are smaller than the total.)</li>
+</ul>
+
+<p>And after the fix, with all 64 bits retained? At 120,000 chunks the probability of a collision is
+about 4 &times; 10<sup>&minus;10</sup>. You would need roughly 10 million chunks sharing a prefix before
+reaching a 0.0003% chance. The failure mode is gone, not reduced.</p>
+
+<h3 id="blame">2.4 Why it always looked like your branch's fault</h3>
+
+<p>The arithmetic is the bug, but the ergonomics are what made it expensive. Two properties combine
+badly.</p>
+
+<p><strong>The hash is deterministic, so the build is not flaky &mdash; it is stuck.</strong> Given a fixed
+module graph, the collision either exists or it does not, and it reproduces exactly. That sounds like
+good news for debugging. It is not, because of the second property:</p>
+
+<p><strong>Which pair collides is chosen by the hash, not by anything structural.</strong> The two chunks
+that collide have nothing to do with each other. They are not in the same route, they do not import
+each other, they are not even necessarily near each other in the tree. They are simply the pair whose
+64-bit hashes happened to agree in their top 32.5 bits.</p>
+
+<p>The consequences follow mechanically, and every one of them points at an innocent party:</p>
+
+<ul>
+  <li>Any commit that changes the module graph &mdash; adding a route, importing a library, splitting a
+  component &mdash; reshuffles which chunks exist, and so reshuffles which pair collides. The failure
+  therefore lands on <em>whichever branch last touched the graph</em>, and looks like that branch's
+  fault.</li>
+  <li><code>git bisect</code> works perfectly and tells you nothing useful. It converges on a real commit
+  &mdash; the one that pushed the population over the edge &mdash; but that commit is innocent, and no
+  file in its diff is responsible.</li>
+  <li>Moving a module to "fix" it does fix it, which is the cruelest part, because it teaches you the
+  wrong lesson. You have not removed the collision; you have relocated it.</li>
+  <li>The PR notes a particularly clean demonstration: renaming a module <em>inside</em> a colliding
+  chunk does not change the chunk's name at all. Same two chunks, same seven-character name, and the
+  renamed file now visibly listed inside one of them. Nothing you can see in the error has any
+  causal relationship to the error.</li>
+</ul>
+
+<div class="callout">
+<span class="label">Worth internalising</span>
+<p>A deterministic failure whose <em>location</em> is chosen by a hash function is harder to debug than a
+flaky one. Flakiness at least advertises that the cause is not where you are looking. This failure
+impersonates a normal, reproducible, bisectable regression right up until you try to fix it.</p>
+</div>
+
+
+<h2 id="code">3. The Code</h2>
+
+<p>The pull request touches 711 files. Exactly two of them contain a decision; one of those two is an
+accident. Everything else is regenerated output. It is worth walking the change in that order, because
+the ratio is itself informative about what kind of change this is.</p>
+
+<h3 id="thechange">3.1 The change itself</h3>
+
+<p>All of it, in <code>turbopack/crates/turbopack-core/src/ident.rs</code>:</p>
+
+<pre><code>         if has_hash {
+             let hash = encode_base38(hasher.finish());
+<span class="del">-            // 7 base38 chars ~= 36 bits of collision resistance</span>
+<span class="del">-            let truncated_hash = &amp;hash[..7];</span>
+<span class="del">-            write!(name, "_{truncated_hash}")?;</span>
+<span class="add">+            // Use the complete fixed-width base38 encoding of the 64-bit hash.</span>
+<span class="add">+            //</span>
+<span class="add">+            // This suffix is what distinguishes idents that share a readable</span>
+<span class="add">+            // name prefix, so truncating it makes distinct output paths collide</span>
+<span class="add">+            // for large module graphs, failing the build with "Two or more</span>
+<span class="add">+            // assets with different content were emitted to the same output</span>
+<span class="add">+            // path". Keeping all 64 bits removes that failure mode, at the cost</span>
+<span class="add">+            // of a slightly longer file name.</span>
+<span class="add">+            write!(name, "_{hash}")?;</span>
+         }</code></pre>
+
+<p>Two lines deleted, one added, and six lines of comment explaining <em>why</em> the truncation was
+never safe &mdash; which is the part that stops someone reintroducing it in two years to shorten
+filenames.</p>
+
+<p>Note what the change does <em>not</em> do. It does not change the hash function, the hashed inputs,
+the alphabet, or the encoding. <code>encode_base38</code> was already returning the full thirteen
+characters; the old code was throwing six of them away one line later. The fix is to stop discarding
+information that had already been computed.</p>
+
+<div class="callout good">
+<span class="label">Design note</span>
+<p>The PR author explicitly offers the alternative in the description: <em>"If you would rather solve
+this by hashing more distinguishing input rather than widening the truncation, I am glad to rework it;
+the length is the smallest change that removes the failure mode."</em> That is the right instinct.
+Feeding more input into the hash &mdash; say, the full chunk-item paths rather than the common ancestor
+&mdash; would produce prettier names, but it changes <em>what identity means</em>, with consequences for
+caching and incremental rebuilds. Keeping the bits you already have is strictly smaller.</p>
+</div>
+
+<h3 id="snapshots">3.2 The other 709 files</h3>
+
+<p>Turbopack's snapshot tests pin emitted chunk names, and the chunk contents themselves embed the names
+of other chunks &mdash; a runtime entry file literally lists the URLs it must fetch. So changing the
+naming scheme rewrites the whole fixture corpus. Those 709 files are all regenerated output, and they
+divide into two kinds, which is where the walkthrough gets interesting.</p>
+
+<h4>Kind one: the hash simply grew</h4>
+
+<p>Most files look exactly like you would predict. The seven old characters are a prefix of the thirteen
+new ones, because it is the same hash of the same input:</p>
+
+<div class="strip">
+  <div class="strip-label">A plain content chunk &mdash; same hash, six more digits kept</div>
+  <div class="strip-row">
+    <div class="seg seg-head">1jsg</div>
+    <div class="seg seg-path">_tests_snapshot_basic-tree-shake_dynamic-import_input_index</div>
+    <div class="seg seg-hash"><span class="tag">before (7)</span>_17se2p5</div>
+    <div class="seg seg-ext">.js</div>
+  </div>
+  <div class="strip-row" style="margin-top:4px">
+    <div class="seg seg-head">1jsg</div>
+    <div class="seg seg-path">_tests_snapshot_basic-tree-shake_dynamic-import_input_index</div>
+    <div class="seg seg-hash"><span class="tag">after (13)</span>_17se2p5<strong>tp_9aa</strong></div>
+    <div class="seg seg-ext">.js</div>
+  </div>
+</div>
+<p class="strip-note">Same pattern throughout: <code>1y039z7</code> &rarr; <code>1y039z71s70lw</code>,
+<code>1b34ju5</code> &rarr; <code>1b34ju5a6z6v3</code>, <code>0xj7csh</code> &rarr;
+<code>0xj7cshvyczs_</code>. The old name was always a truncation of the new one.</p>
+
+<h4>Kind two: the hash changed entirely</h4>
+
+<p>But some files do not follow the pattern at all. In the same test directory, the entry chunk went
+from <code>_0qno3y-</code> to <code>_1ilscbcayntrz</code>, and <code>0qno3y-</code> is emphatically not a
+prefix of <code>1ilscbcayntrz</code>. Elsewhere, <code>_210e6bp</code> became <code>_0clmgi5qq_o2b</code>.
+The hash <em>input</em> changed, not just its width. Why?</p>
+
+<p>Because of one method in
+<code>turbopack/crates/turbopack-browser/src/ecmascript/evaluate/chunk.rs</code>:</p>
+
+<pre><code>async fn ident_for_path(&amp;self) -> Result&lt;Vc&lt;AssetIdent&gt;&gt; {
+    let mut ident = self.ident.owned().await?
+        .with_modifier(rcstr!("ecmascript browser evaluate chunk"));
+
+    ident.modifiers.extend(evaluatable_assets.iter()
+        .map(|entry| entry.ident().to_string().owned()).try_join().await?);
+
+    <span class="hl">ident.modifiers.extend(self.other_chunks.await?.iter()</span>
+    <span class="hl">    .map(|chunk| chunk.path().to_string().owned())   // &lt;-- OUTPUT paths</span>
+    <span class="hl">    .try_join().await?);</span>
+
+    Ok(ident.into_vc())
+}</code></pre>
+
+<p>An evaluate chunk is the bootstrap file: it must know the URLs of every other chunk in its group, so
+it can fetch them. Those output paths are folded into its own ident as modifiers &mdash; and modifiers
+are hashed. So when the sibling chunks' names got six characters longer, the evaluate chunk's hash
+<em>input</em> changed, and its own name changed wholesale.</p>
+
+<div class="callout">
+<span class="label">The cascade, in one strip</span>
+<p>Widening the hash is not a purely local edit to a filename. For any asset whose identity includes
+other assets' output paths, it is an edit to the hash's <em>input</em>.</p>
+</div>
+
+<div class="strip" style="margin-top:16px">
+  <div class="strip-label">Step 1 &mdash; the sibling chunk's name grows (kind one)</div>
+  <div class="strip-row">
+    <div class="seg seg-path">..._input_lib</div>
+    <div class="seg seg-hashx">_1y039z7</div>
+    <div class="seg seg-hash">_1y039z7<strong>1s70lw</strong></div>
+    <div class="seg seg-ext">.js</div>
+  </div>
+</div>
+<div class="strip">
+  <div class="strip-label">Step 2 &mdash; that new name is a hashed modifier of the entry chunk...</div>
+  <div class="strip-row">
+    <div class="seg seg-path"><span class="tag">entry ident</span>path=..._input_index</div>
+    <div class="seg seg-drop"><span class="tag">modifier</span>"...lib_1y039z71s70lw.js"</div>
+    <div class="seg seg-drop"><span class="tag">modifier</span>"...index_17se2p5tp_9aa.js"</div>
+  </div>
+</div>
+<div class="strip">
+  <div class="strip-label">Step 3 &mdash; ...so the entry chunk's hash is a different number, not a longer one</div>
+  <div class="strip-row">
+    <div class="seg seg-head">1ece</div>
+    <div class="seg seg-path">..._input_index</div>
+    <div class="seg seg-hashx">_0qno3y-</div>
+    <div class="seg seg-hash">_1ilscbcayntrz</div>
+    <div class="seg seg-ext">.js</div>
+  </div>
+</div>
+
+<h3 id="shorter">3.3 Where the names got <em>shorter</em></h3>
+
+<p>The PR summarises the cost as "6 extra characters per emitted chunk filename". That is true for short
+names, and the reader's next question is the obvious one: on a deeply nested monorepo path, does the
+filename now blow past what the filesystem will take?</p>
+
+<p>It does not, and the reason is a length cap that was already in <code>output_name</code>, immediately
+after the hash suffix is appended:</p>
+
+<pre><code><span class="cmt">// Everything before i is hashed away; everything after i is kept readable.</span>
+let mut i = 0;
+static NODE_MODULES: &amp;str = "_node_modules_";
+if let Some(j) = name.rfind(NODE_MODULES) { i = j + NODE_MODULES.len(); }
+
+const MAX_FILENAME: usize = 80;
+if name.len() - i &gt; MAX_FILENAME {
+    i = name.len() - MAX_FILENAME;
+    if let Some(j) = name[i..].find('_') &amp;&amp; j &lt; 20 { i += j + 1; }  <span class="cmt">// snap to a separator</span>
+}
+if i &gt; 0 {
+    let hash = encode_base38(hash_xxh3_hash64(&amp;name.as_bytes()[..i]));
+    let truncated_hash = &amp;hash[..4];               <span class="cmt">// the purple head hash</span>
+    name = format!("{}_{}", truncated_hash, &amp;name[i..]);
+}</code></pre>
+
+<p>The readable tail is capped at 80 characters. Anything longer gets cut, the cut point snaps forward to
+the next <code>_</code> (if one is within 20 characters, so segments are not sliced mid-word), and the
+discarded head is replaced by a four-character hash of itself. This is where the purple segment in every
+diagram comes from.</p>
+
+<p>Now watch what happens to a name that was already near the cap. Six more characters push it over, the
+split point moves right, snaps past the next separator, and an entire path segment
+&mdash; <code>turbopack-tests_</code> &mdash; disappears into the head hash:</p>
+
+<div class="strip">
+  <div class="strip-label">Before &mdash; 84 characters</div>
+  <div class="strip-row">
+    <div class="seg seg-head"><span class="tag">head</span>0_9x</div>
+    <div class="seg seg-path"><span class="tag">readable (75)</span>_turbopack-tests_tests_snapshot_basic-tree-shake_export-named_input</div>
+    <div class="seg seg-hash"><span class="tag">7</span>_0xj7csh</div>
+    <div class="seg seg-ext">._.js</div>
+  </div>
+</div>
+<div class="strip">
+  <div class="strip-label">After &mdash; 74 characters</div>
+  <div class="strip-row">
+    <div class="seg seg-head"><span class="tag">head</span>1jsg</div>
+    <div class="seg seg-drop"><span class="tag">folded into head hash</span>turbopack-tests_</div>
+    <div class="seg seg-path"><span class="tag">readable (65)</span>_tests_snapshot_basic-tree-shake_export-named_input</div>
+    <div class="seg seg-hash"><span class="tag">13</span>_0xj7cshvyczs_</div>
+    <div class="seg seg-ext">._.js</div>
+  </div>
+</div>
+<p class="strip-note">Real names from the regenerated snapshots. The file got <em>ten characters
+shorter</em> because a sixteen-character path segment was traded for a four-character hash.</p>
+
+<div class="callout warn">
+<span class="label">The real cost</span>
+<p>The cost of this PR is not filename length &mdash; the 80-character cap bounds that regardless, so
+total length stays around 90 either way. The cost is <strong>readability at the front</strong>: names
+already near the cap surrender one more path segment to the head hash. That is a fair trade for a build
+that completes, but it is the honest accounting, and it is not the accounting in the PR description.</p>
+</div>
+
+<h3 id="untouched">3.4 The truncation that was left alone</h3>
+
+<p>You will have noticed that the head hash is <em>also</em> truncated, to four characters, with a comment
+making the same optimistic claim: "4 base38 chars &asymp; 21 bits". By the corrected formula it is 16.77
+bits &mdash; only 111,653 distinct values. Five hundred colliding names would be a coin flip. The PR does
+not touch it. Is that an oversight?</p>
+
+<p>No, and understanding why is the best test of whether the mechanism has landed. The two truncations
+face wildly different populations.</p>
+
+<table>
+  <tr><th></th><th>ident hash (was 7)</th><th>head hash (still 4)</th></tr>
+  <tr>
+    <td><strong>separates</strong></td>
+    <td>every chunk sharing a common-ancestor path</td>
+    <td>only names whose last 80 characters are byte-identical but whose heads differ</td>
+  </tr>
+  <tr>
+    <td><strong>population</strong></td>
+    <td>tens of thousands, growing with app size</td>
+    <td>a handful; two paths must agree on 80 trailing characters to even compete</td>
+  </tr>
+  <tr>
+    <td><strong>backed up by</strong></td>
+    <td>nothing &mdash; it was the sole discriminator</td>
+    <td>the full 13-character ident hash, which lives in the tail and always survives the cut</td>
+  </tr>
+</table>
+
+<p>That last row is the load-bearing one. The ident hash is appended <em>before</em> the length cap runs,
+and the cap preserves the final 80 characters &mdash; comfortably more than 13. So the full 64-bit ident
+hash is always inside the kept tail. The head hash never has to distinguish two assets on its own; it
+only breaks ties between differing <em>prefixes</em> of names that are otherwise identical. The one
+case where it stands alone is an ident with no hash suffix (a plain module, <code>has_hash == false</code>);
+there the head hash is the sole discriminator, which is a real if small exposure &mdash; and one this PR
+neither creates nor worsens.</p>
+
+<div class="callout good">
+<span class="label">The general lesson</span>
+<p>Truncating a hash is safe exactly in proportion to how small the population it must separate is, and
+how much <em>other</em> distinguishing information survives alongside it. The seven-character ident hash
+violated both conditions: unbounded population, no backup. The four-character head hash satisfies both.
+Same arithmetic error in the comment; only one of them is a bug.</p>
+</div>
+
+<h3 id="residue">3.5 Loose ends</h3>
+
+<p>Two things a reader diffing this PR will trip over, neither of them substantive:</p>
+
+<ul>
+  <li><strong><code>Cargo.lock</code>, +1 line.</strong> It adds <code>rustc-hash 2.1.1</code> to the
+  dependency list of <code>turbo-tasks-fetch</code> &mdash; a rebase artifact, unrelated to naming.</li>
+  <li><strong>Two failing checks.</strong> <code>test/production/deterministic-build/deployment-id.test.ts</code>
+  fails under <em>turbopack production (3/7)</em>
+  (<a href="https://github.com/vercel/next.js/actions/runs/33014950667/job/98339975391">job log</a>), and
+  <code>thank you, next</code> fails &mdash; that one is the PR-description linter, which is expected on
+  a re-pushed PR. The author's own comment explains the branch name: <em>"I needed to recreate the PR,
+  because something about commit signing requirements..."</em> The production-test failure is real and
+  visible in CI; determining its cause requires running it, which is beyond what the diff shows.</li>
+</ul>
+
+<p>One risk the PR flags and then dismisses: every emitted filename changes on upgrade. Its stated
+reasoning is that nothing reads these names across versions &mdash; they are internal build output,
+referenced only by manifests generated in the same build. That is the author's claim rather than
+something visible in the diff, though it matches how the names are used everywhere they appear here.</p>
+
+
+<h2 id="quiz">4. Quiz</h2>
+
+<p>Five questions. None are gotchas; each one has an answer that follows from something in the sections
+above. Click an option to check it.</p>
+
+<div class="q" data-answer="c">
+  <div class="qnum">Question 1 of 5</div>
+  <div class="qtext">The deleted comment claimed <code>&amp;hash[..7]</code> gave "&asymp; 36 bits of
+  collision resistance", but the true figure is 32.5 bits. Where did the missing 4.2 bits go?</div>
+  <button class="opt" data-k="a"><span class="mark">A</span>xxh3 is a non-cryptographic hash, so its output has less entropy than its width suggests.</button>
+  <button class="opt" data-k="b"><span class="mark">B</span>The base38 alphabet excludes <code>~</code> and <code>.</code>, so it is effectively base 36.</button>
+  <button class="opt" data-k="c"><span class="mark">C</span>13 base38 digits can express 68.22 bits but the value is only 64, and all 4.22 bits of that slack sit in the leading digit &mdash; which truncation keeps.</button>
+  <button class="opt" data-k="d"><span class="mark">D</span>The <code>_</code> separator written before the hash consumes part of the encoding space.</button>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="b">
+  <div class="qnum">Question 2 of 5</div>
+  <div class="qtext">In the regenerated snapshots, most chunk hashes simply grew
+  (<code>17se2p5</code> &rarr; <code>17se2p5tp_9aa</code>), but browser <em>evaluate</em> chunks changed
+  wholesale (<code>0qno3y-</code> &rarr; <code>1ilscbcayntrz</code>). Why the difference?</div>
+  <button class="opt" data-k="a"><span class="mark">A</span>Evaluate chunks are content-hashed rather than ident-hashed, so their names track their bytes.</button>
+  <button class="opt" data-k="b"><span class="mark">B</span><code>ident_for_path()</code> folds every sibling chunk's <em>output path</em> into the evaluate chunk's modifiers, and modifiers are hashed &mdash; so the hash input changed, not just its width.</button>
+  <button class="opt" data-k="c"><span class="mark">C</span>Evaluate chunks use a different hash function that produces a differently-ordered base38 encoding.</button>
+  <button class="opt" data-k="d"><span class="mark">D</span>The longer names pushed evaluate chunks past <code>MAX_FILENAME</code>, which rehashes the whole name.</button>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="d">
+  <div class="qnum">Question 3 of 5</div>
+  <div class="qtext"><code>output_name()</code> destructures the ident with <code>path: _</code>, excluding
+  the path from the hash. Given that, which assets are actually at risk of a filename collision?</div>
+  <button class="opt" data-k="a"><span class="mark">A</span>Every emitted asset equally, since all of them get a hash suffix.</button>
+  <button class="opt" data-k="b"><span class="mark">B</span>Only assets under <code>node_modules</code>, because of the special <code>_node_modules_</code> split rule.</button>
+  <button class="opt" data-k="c"><span class="mark">C</span>Only assets with a non-empty <code>query</code> or <code>fragment</code>, since those are the first fields hashed.</button>
+  <button class="opt" data-k="d"><span class="mark">D</span>Assets carrying identity beyond their path (<code>has_hash</code> is true) that also share a path &mdash; above all chunks, whose path is a coarse common-ancestor directory.</button>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="a">
+  <div class="qnum">Question 4 of 5</div>
+  <div class="qtext">The head hash is still truncated to 4 characters &mdash; 111,653 values, 16.77 real
+  bits, and a comment that also overstates it. Why is leaving it alone the right call?</div>
+  <button class="opt" data-k="a"><span class="mark">A</span>It only separates names whose last 80 characters are byte-identical but whose heads differ &mdash; a tiny population &mdash; and the full 13-character ident hash lives in that preserved tail as a backup.</button>
+  <button class="opt" data-k="b"><span class="mark">B</span>It is computed from the name rather than the ident, and name-derived hashes are not subject to birthday collisions.</button>
+  <button class="opt" data-k="c"><span class="mark">C</span>Widening it would break the <code>MAX_FILENAME</code> cap of 80 characters.</button>
+  <button class="opt" data-k="d"><span class="mark">D</span>It is a genuine latent bug; the PR simply scopes it out for a follow-up.</button>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="c">
+  <div class="qnum">Question 5 of 5</div>
+  <div class="qtext">The hash is fully deterministic and the failure reproduces byte-identically. Why did
+  it still consistently appear to be the fault of whichever branch was being merged?</div>
+  <button class="opt" data-k="a"><span class="mark">A</span>Turbopack's parallel emit means chunk ordering varies between runs, so the collided pair is not stable.</button>
+  <button class="opt" data-k="b"><span class="mark">B</span>The error message names the output path, and output paths are branch-specific.</button>
+  <button class="opt" data-k="c"><span class="mark">C</span>Which pair collides is chosen by the hash, not by structure &mdash; so any commit that alters the module graph reshuffles the pairing, and the failure surfaces on the last branch to touch it, with no responsible file in its diff.</button>
+  <button class="opt" data-k="d"><span class="mark">D</span>The collision only occurs on CI machines, whose filesystem case-sensitivity differs from developers' laptops.</button>
+  <div class="fb"></div>
+</div>
+
+<div class="score" id="score">Answered 0 of 5.</div>
+
+<script>
+(function () {
+  var FEEDBACK = {
+    1: {
+      c: "Correct. 13 &times; log2(38) = 68.22, the value needs 64, so there are 4.22 bits of slack. Because encode_base38_fixed writes the most significant digit first, truncation keeps the high-order digits and pays that slack immediately. The leading digit can only be 0, 1 or 2. The right formula is 64 &minus; (13 &minus; k) &times; log2(38), giving 32.51 bits for k = 7 &mdash; about 6.13 billion values, not 114 billion.",
+      a: "Not this one. xxh3 distributes well; the loss is not statistical. It is structural: 13 base38 digits express 68.22 bits for a 64-bit value, and truncation from the most significant end throws that 4.22-bit slack away first.",
+      b: "Not this one. The alphabet really is 38 characters &mdash; <code>0-9 a-z _ -</code>. <code>~</code> and <code>.</code> were excluded when the alphabet was designed (Nginx and WAF hardening rules 403 on <code>~~</code> and <code>...</code>), but the base is still 38.",
+      d: "Not this one. The <code>_</code> is a literal separator in the filename, outside the encoding entirely. The loss is the 4.22 bits of slack in a 13-digit base38 encoding of a 64-bit value, which truncation from the top consumes first."
+    },
+    2: {
+      b: "Correct. <code>ident_for_path()</code> in the browser evaluate chunk extends <code>ident.modifiers</code> with <code>chunk.path().to_string()</code> for every other chunk in the group, because the bootstrap file must know their URLs. Modifiers are hashed, so when the siblings' names grew, the evaluate chunk's hash <em>input</em> changed and it landed on a different number.",
+      a: "Not quite. The comment in <code>ident.rs</code> notes that a content hash is what turbopack-nodejs would ideally use, but today both contexts go through the same ident-based <code>output_name</code>. The real cause is that sibling output paths are hashed modifiers of the evaluate chunk's ident.",
+      c: "No &mdash; there is exactly one <code>encode_base38</code>, and it is fixed-width most-significant-digit-first for every caller. The difference is in the hash <em>input</em>: sibling output paths are modifiers on the evaluate chunk's ident.",
+      d: "No. The <code>MAX_FILENAME</code> cap rewrites the <em>head</em> of the name (the purple 4-character segment); it never touches the ident hash suffix, which sits in the preserved tail. The evaluate chunk's suffix changed because its hashed modifiers included sibling output paths."
+    },
+    3: {
+      d: "Correct, and this is the whole bug in one sentence. <code>has_hash</code> gates the suffix, so a plain module gets none &mdash; its path is already unique. Chunks are the opposite case: <code>EcmascriptChunk::ident()</code> sets <code>path</code> to the common ancestor of its items and puts the distinguishing content in <code>assets</code>, so tens of thousands of chunks share one readable prefix and rely entirely on the suffix.",
+      a: "Not quite &mdash; <code>has_hash</code> means a plain source module with no query, modifiers, parts or layer gets no suffix at all, and needs none. The at-risk population is specifically assets whose identity exceeds their path, which in practice means chunks.",
+      b: "No. The <code>_node_modules_</code> rule only chooses where the 80-character readability cut falls; it has nothing to do with the ident hash or with collisions.",
+      c: "Too narrow. Query and fragment are merely the first two fields hashed. For chunks the decisive field is <code>assets</code> &mdash; the list of chunk items &mdash; while the shared <code>path</code> is excluded from the hash by design."
+    },
+    4: {
+      a: "Correct. Both truncations share the same arithmetic error, but only one is a bug. The ident hash had an unbounded population and no backup; the head hash faces a tiny population (two names must agree on 80 trailing characters to compete at all) and the preserved tail already carries the full 13-character ident hash.",
+      b: "No &mdash; a hash is a hash, and the head hash is just as subject to the birthday bound. What saves it is population size and the fact that the full ident hash survives in the tail beside it.",
+      c: "No. The cap applies to the readable tail, and the head hash is added after the cut; a wider head hash would fit. The reason to leave it is that it separates a tiny population and is backed by the full ident hash in the tail.",
+      d: "Tempting, but no. It is a stale comment, not a latent bug. The head hash only breaks ties between differing prefixes of names whose last 80 characters already match &mdash; and the full 64-bit ident hash sits inside that matching tail."
+    },
+    5: {
+      c: "Correct. The colliding pair has no structural relationship; it is whichever two chunks happened to agree in the top 32.5 bits. Any commit that reshapes the module graph reshuffles the pairing, so the error lands on the last branch to touch it, <code>git bisect</code> converges on an innocent commit, and moving a module relocates the collision rather than fixing it. The PR even notes that renaming a file <em>inside</em> a colliding chunk leaves the chunk's name unchanged.",
+      a: "No &mdash; the opposite. The hash is deterministic and the failure reproduces byte-identically: same path, same rejected content hashes, run after run. That determinism is what makes it impersonate a normal regression.",
+      b: "The message does name the path, but that is not the reason. The reason is that the colliding pair is selected by the hash rather than by structure, so any graph-shaping commit reshuffles it and the failure attaches to whichever branch came last.",
+      d: "No. Nothing here depends on the machine or the filesystem &mdash; the base38 alphabet was chosen to be safe on case-insensitive filesystems, and the collision is pure arithmetic that reproduces everywhere."
+    }
+  };
+
+  var answered = 0, correct = 0;
+  var qs = document.querySelectorAll(".q");
+
+  qs.forEach(function (q, idx) {
+    var n = idx + 1;
+    var right = q.getAttribute("data-answer");
+    var fb = q.querySelector(".fb");
+    q.querySelectorAll(".opt").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (q.dataset.done) return;
+        q.dataset.done = "1";
+        var k = btn.getAttribute("data-k");
+        var ok = k === right;
+        answered++; if (ok) correct++;
+
+        q.querySelectorAll(".opt").forEach(function (b) {
+          b.disabled = true;
+          if (b.getAttribute("data-k") === right) b.classList.add("correct");
+        });
+        if (!ok) btn.classList.add("wrong");
+
+        fb.innerHTML = FEEDBACK[n][k];
+        fb.className = "fb show " + (ok ? "ok" : "no");
+
+        document.getElementById("score").innerHTML =
+          "Answered " + answered + " of 5 &mdash; " + correct + " correct.";
+      });
+    });
+  });
+})();
+</script>
+
+<h2 style="border:0;padding-top:34px">Closing</h2>
+
+<p>The thing to carry away is not "hashes should be longer". It is that a truncated hash is a bet on a
+population size, and the bet is usually made once, in a comment, by someone who is not thinking about
+what the field will look like in five years. Here the bet was <em>an application will not have a hundred
+thousand chunks under one directory</em>, and it held until it did not.</p>
+
+<p>What made the failure expensive was not the arithmetic but the shape of the blame. A collision chosen
+by a hash function has no relationship to anything a human can see in the error, and every debugging
+instinct &mdash; bisect, revert, move the file &mdash; produces a result that looks like progress and
+teaches the wrong lesson. That is the part worth recognising next time: when a fix "works" but you
+cannot say <em>why</em> the failing pair was that pair, you have probably relocated a collision rather
+than removed one.</p>
+
+<p>The remedy, in the end, was to stop throwing away six characters that had already been computed.</p>
+
+</div>
+</body>
+</html>
