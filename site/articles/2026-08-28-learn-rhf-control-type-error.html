@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="React Hook Form の control に付く Type エラーは入力欄の型違いではなく、Control の第 3 generic（TTransformedValues）の不変性が原因であるという解説。" />
+<meta name="archive:title" content="control の Type エラーの原理 — React Hook Form" />
+<meta name="archive:published" content="2026-08-28" />
+<meta name="archive:type" content="Explainer" />
+<meta name="archive:source" content="react-hook-form · Control&lt;T, TContext, TTransformedValues&gt;" />
+<meta name="archive:category" content="React Hook Form" />
+<meta name="archive:category" content="TypeScript" />
+<meta name="archive:category" content="React" />
+<meta name="archive:category" content="Forms" />
+<meta name="archive:reading-minutes" content="12" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="Control&lt;T&gt; ≡ Control&lt;T, any, T&gt; // TTransformedValues" />
+<title>control の Type エラーの原理 — React Hook Form</title>
+<style>
+:root{
+  --ink:#1a1a1a; --ink-soft:#4a4a4a; --line:#e2e2e2; --bg:#fdfdfc;
+  --accent:#1976D2; --accent-soft:#E9F4FF;
+  --warn:#B45309; --warn-soft:#FEF3C7;
+  --danger:#B91C1C; --danger-soft:#FEE2E2;
+  --ok:#15803D; --ok-soft:#DCFCE7;
+  --unv:#6D28D9; --unv-soft:#EDE9FE;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.85; font-size:17px;
+}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px 120px}
+header.hero{padding:64px 0 32px;border-bottom:1px solid var(--line);margin-bottom:32px}
+h1{font-size:2.05rem;line-height:1.35;margin:0 0 12px;letter-spacing:-.01em}
+.sub{color:var(--ink-soft);font-size:1.02rem;margin:0}
+.meta{margin-top:20px;font-size:.85rem;color:var(--ink-soft);font-family:var(--mono)}
+h2{font-size:1.5rem;margin:64px 0 8px;padding-top:12px;letter-spacing:-.01em;scroll-margin-top:20px}
+h2 .num{color:var(--accent);font-family:var(--mono);font-size:1rem;margin-right:10px}
+h3{font-size:1.13rem;margin:38px 0 8px}
+p{margin:14px 0}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.87em;background:#f1f1ef;padding:2px 5px;border-radius:4px}
+pre{
+  font-family:var(--mono);font-size:.82rem;line-height:1.65;
+  background:#1e1e21;color:#e8e8ea;padding:16px 18px;border-radius:8px;
+  overflow-x:auto; white-space:pre;
+}
+pre code{background:none;padding:0;color:inherit;font-size:1em}
+.tok-c{color:#8b949e}
+.tok-k{color:#ff7b72}
+.tok-s{color:#a5d6ff}
+.tok-t{color:#79c0ff}
+.tok-f{color:#d2a8ff}
+
+nav.toc{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin:0 0 8px}
+nav.toc strong{display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:10px}
+nav.toc ol{margin:0;padding-left:22px}
+nav.toc li{margin:5px 0}
+nav.toc a{text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+nav.toc .skip{font-size:.82rem;color:var(--ink-soft)}
+
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:14px 18px;border-radius:0 8px 8px 0;margin:22px 0}
+.callout .label{font-weight:700;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:4px}
+.callout p:first-of-type{margin-top:0}
+.callout p:last-child{margin-bottom:0}
+.callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+.callout.warn .label{color:var(--warn)}
+.callout.danger{border-color:var(--danger);background:var(--danger-soft)}
+.callout.danger .label{color:var(--danger)}
+.callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+.callout.ok .label{color:var(--ok)}
+.callout.unverified{border-color:var(--unv);background:var(--unv-soft)}
+.callout.unverified .label{color:var(--unv)}
+
+.src{font-size:.78rem;color:var(--ink-soft);margin-top:-8px;padding-left:2px;font-style:italic}
+.src a{color:var(--ink-soft)}
+
+.flow{background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px;margin:24px 0}
+.flow .cap{font-size:.8rem;color:var(--ink-soft);margin-bottom:16px}
+.flow-row{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;justify-content:center}
+.card{
+  border:2px solid var(--line);border-radius:10px;padding:14px 16px;background:#fff;
+  flex:1 1 180px;min-width:160px;
+}
+.card .who{font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+.card .ttl{font-weight:700;font-size:.95rem}
+.card .ex{font-family:var(--mono);font-size:.74rem;color:var(--ink-soft);margin-top:8px;white-space:pre-wrap}
+.card.in{border-color:#1E40AF;background:#EFF6FF}
+.card.mid{border-color:#6D28D9;background:#F5F3FF}
+.card.out{border-color:#15803D;background:#F0FDF4}
+.card.slot{border-color:var(--danger);background:#FEF2F2}
+.arrow-col{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:72px;color:var(--ink-soft);font-size:.75rem;font-family:var(--mono);text-align:center}
+.arrow-col .ln{font-size:1.5rem;line-height:1;color:var(--accent)}
+
+.stamp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}
+.slot-box{border:1px dashed #9CA3AF;border-radius:8px;padding:10px 12px;background:#fff}
+.slot-box b{display:block;font-family:var(--mono);font-size:.72rem;color:var(--accent);margin-bottom:4px}
+.slot-box span{font-size:.82rem}
+.slot-box.hot{border-style:solid;border-color:var(--danger);background:var(--danger-soft)}
+
+table{width:100%;border-collapse:collapse;margin:22px 0;font-size:.9rem;background:#fff}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:#f7f7f5;font-weight:700;font-size:.82rem}
+td code{font-size:.85em}
+.tbl-wrap{overflow-x:auto}
+.pass{color:var(--ok);font-weight:700;font-family:var(--mono);font-size:.82rem}
+.fail{color:var(--danger);font-weight:700;font-family:var(--mono);font-size:.82rem}
+
+.measure{
+  border:1px solid var(--line);border-radius:10px;background:#fff;margin:10px 0;overflow:hidden
+}
+.measure summary{
+  cursor:pointer;padding:12px 16px;font-size:.93rem;list-style:none;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.measure summary::-webkit-details-marker{display:none}
+.measure summary:hover{background:#f7f7f5}
+.measure .badge{flex:none;font-family:var(--mono);font-size:.72rem;padding:2px 8px;border-radius:999px;margin-top:4px}
+.measure .badge.ok{background:var(--ok-soft);color:var(--ok)}
+.measure .badge.ng{background:var(--danger-soft);color:var(--danger)}
+.measure .body{padding:0 16px 16px}
+.measure pre{margin:10px 0 0}
+
+.states{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:24px 0;justify-content:center}
+.state-box{border:2px solid var(--accent);border-radius:10px;padding:14px 16px;text-align:center;background:#fff;min-width:150px;flex:1 1 140px}
+.state-box .nm{font-family:var(--mono);font-size:.82rem;font-weight:700}
+.state-box .dsc{font-size:.75rem;color:var(--ink-soft);margin-top:4px}
+.state-box.inv{border-color:#6D28D9;background:#F5F3FF}
+.state-box.cov{border-color:#15803D;background:#F0FDF4}
+.state-box.con{border-color:#B45309;background:#FFFBEB}
+.arrow{display:flex;flex-direction:column;align-items:center;padding:0 8px;min-width:90px}
+.arrow .ln{font-size:1.4rem;color:var(--ink-soft);line-height:1}
+.arrow .lb{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);text-align:center}
+
+.quiz{background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px;margin:22px 0}
+.quiz .q{font-weight:700;margin:0 0 14px}
+.quiz .q .qn{color:var(--accent);font-family:var(--mono);margin-right:8px}
+.opt{
+  display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fdfdfc;
+  border-radius:8px;padding:11px 14px;margin:7px 0;cursor:pointer;font:inherit;font-size:.93rem;
+  transition:background .12s,border-color .12s
+}
+.opt:hover:not(:disabled){background:#f4f8fd;border-color:var(--accent)}
+.opt:disabled{cursor:default}
+.opt.correct{background:var(--ok-soft);border-color:var(--ok);font-weight:600}
+.opt.wrong{background:var(--danger-soft);border-color:var(--danger)}
+.fb{margin-top:12px;padding:12px 14px;border-radius:8px;font-size:.9rem;display:none}
+.fb.show{display:block}
+.fb.good{background:var(--ok-soft);color:#14532d}
+.fb.bad{background:var(--danger-soft);color:#7f1d1d}
+.score{text-align:center;font-size:1.05rem;padding:18px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-top:22px}
+.score b{color:var(--accent);font-size:1.4rem;font-family:var(--mono)}
+
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);font-size:.85rem;color:var(--ink-soft)}
+footer ul{padding-left:20px}
+footer li{margin:5px 0}
+@media (max-width:600px){
+  body{font-size:16px}
+  h1{font-size:1.55rem}
+  h2{font-size:1.28rem;margin-top:48px}
+  .wrap{padding:0 16px 80px}
+  .arrow{min-width:100%;padding:10px 0}
+  .stamp{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>control の Type エラーの原理</h1>
+  <p class="sub">赤い波線は、入力欄の型が間違っているからではありません。<br>
+  <code>control</code> という一つの箱に、入力の形と送信の形が<b>両方</b>刻印されていて、受け取る側がその片方しか知らない、という話です。</p>
+  <p class="meta">2026-08-28 ／ 実測: TypeScript 6.0.3 × react-hook-form 7.85.0 ／ 対象: zumen-fe ClientForm</p>
+</header>
+
+<nav class="toc">
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#s1">背景 — フォームライブラリが型を三つ持つ理由</a> <span class="skip">（RHF に馴染みがあれば読み飛ばしてよい）</span></li>
+    <li><a href="#s2">背景（近景） — <code>Control</code> の三つの generic</a></li>
+    <li><a href="#s3">直感 — 犬の箱を動物の箱としては渡せない</a></li>
+    <li><a href="#s4">仕組み — 今日測った代入表</a></li>
+    <li><a href="#s5">このコードベースでは</a></li>
+    <li><a href="#s6">理解度チェック（5 問）</a></li>
+  </ol>
+</nav>
+
+<div class="callout">
+  <span class="label">この文書の出所</span>
+  <p>事実は次の三つだけです。<b>①公式ドキュメントとインストール済みの型定義</b>（リンク・ファイル行付き）、<b>②今日 <code>/tmp</code> で走らせた TypeScript 6.0.3 の代入実験</b>（成功／失敗をそのまま掲載）、<b>③このリポジトリを grep / 読んだ結果</b>。推測は紫の「未検証」に隔離しています。</p>
+</div>
+
+<h2 id="s1"><span class="num">1</span>背景 — フォームライブラリが型を三つ持つ理由</h2>
+
+<p>画面上の入力欄が扱う値と、サーバへ送る値は、同じである必要がありません。日付を <code>"2026-08-28"</code> と打って、検証が通ったあと <code>Date</code> にして送る。取引先名は camelCase のまま編集して、送信の直前に snake_case のリクエストボディへ詰め替える。こうした「入力の形」と「出力の形」の分裂は、Zod の <code>transform</code> や <code>coerce</code> では日常茶飯事です。</p>
+
+<p>React Hook Form（以下 RHF）は、長らくこの分裂を型の上で無視していました。フォームの型は一つ、<code>TFieldValues</code> だけ。検証を通ったあとに形が変わっても、<code>handleSubmit</code> のコールバックは入力と同じ型を受け取るとされていた。</p>
+
+<p>公式ドキュメントは、今ではこの分裂を<b>第三 generic</b> として正面から扱います。<code>useForm</code> の第 1 引数が入力、第 3 引数が resolver の出力です。</p>
+
+<pre><span class="tok-c">// https://react-hook-form.com/docs/useform/handlesubmit
+// 「Resolver with Transformed Values」</span>
+<span class="tok-k">const</span> { register, handleSubmit } = useForm&lt;FormInput, unknown, FormOutput&gt;({
+  resolver: zodResolver(schema),
+})
+
+<span class="tok-k">const</span> onSubmit: SubmitHandler&lt;FormOutput&gt; = (data) =&gt; {
+  <span class="tok-c">// data は変換後。emailOrPhone ではなく isEmail / isPhone / value</span>
+}</pre>
+<p class="src">出典: <a href="https://react-hook-form.com/docs/useform/handlesubmit">react-hook-form.com/docs/useform/handlesubmit</a> ／ 同じ型の分け方は <a href="https://github.com/react-hook-form/resolvers/blob/master/_autodocs/api-reference/zod-resolver.md">@hookform/resolvers の Zod 解説</a> でも <code>z.input</code> / <code>z.output</code> として推奨されている</p>
+
+<p><code>@hookform/resolvers</code> はさらに強く言います。入力と出力が違うスキーマに対して <code>useForm&lt;FormData&gt;</code> と<b>一つだけ</b>書くのは誤りで、三つ書くのが正しい、と。</p>
+
+<pre><span class="tok-c">// ❌ 単一 generic は入力と出力を同じ型に固定してしまう</span>
+useForm&lt;FormData&gt;({ resolver: zodResolver(schema) })
+
+<span class="tok-c">// ✅ 入力・文脈・出力を分ける</span>
+useForm&lt;z.input&lt;<span class="tok-k">typeof</span> schema&gt;, unknown, z.output&lt;<span class="tok-k">typeof</span> schema&gt;&gt;({
+  resolver: zodResolver(schema),
+})</pre>
+<p class="src">出典: <a href="https://github.com/react-hook-form/resolvers/blob/master/_autodocs/TYPES_AND_INTERFACES.md">resolvers TYPES_AND_INTERFACES.md</a> 「Fixing Type Mismatch with Generics」</p>
+
+<div class="callout">
+  <span class="label">ここで言う control とは</span>
+  <p><code>useForm</code> が返すオブジェクトのうち、フィールドを登録したり監視したりするための<b>操舵輪</b>です。入力コンポーネントへ props で渡し、<code>Controller</code> / <code>useWatch</code> / <code>useController</code> がこれを受け取ります。実行時の中身はメソッドの束ですが、TypeScript 上では三つの型引数を抱えた巨大なオブジェクト型です。</p>
+</div>
+
+<h2 id="s2"><span class="num">2</span>背景（近景） — Control の三つの generic</h2>
+
+<p>インストール済み RHF 7.85.0 の型定義は、こうなっています。</p>
+
+<pre>export type Control&lt;
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues
+&gt; = {
+  _options: UseFormProps&lt;TFieldValues, TContext, TTransformedValues&gt;;
+  handleSubmit: UseFormHandleSubmit&lt;TFieldValues, TTransformedValues&gt;;
+  register: UseFormRegister&lt;TFieldValues&gt;;
+  <span class="tok-c">/* …他の内部フィールド */</span>
+};</pre>
+<p class="src">出典: <code>node_modules/react-hook-form/dist/types/form.d.ts</code> 654 行付近（今日読んだ実ファイル）</p>
+
+<p>三つの席の役割は、公式の TypeScript ページがはっきり書いています。</p>
+
+<div class="stamp">
+  <div class="slot-box">
+    <b>1. TFieldValues</b>
+    <span>入力欄・<code>watch</code>・<code>setValue</code> が見る形。デフォルト値やフィールド名はここから決まる。</span>
+  </div>
+  <div class="slot-box">
+    <b>2. TContext</b>
+    <span><code>useForm</code> の <code>context</code> オプション。resolver に渡す、フォームの外の情報。未指定なら <code>any</code>。</span>
+  </div>
+  <div class="slot-box hot">
+    <b>3. TTransformedValues</b>
+    <span>resolver が検証後に出す形。<code>handleSubmit</code> の成功コールバックがこれを受け取る。省略すると <code>TFieldValues</code> と同じ。</span>
+  </div>
+</div>
+<p class="src">出典: <a href="https://react-hook-form.com/ts">react-hook-form.com/ts</a> 「Many of the types below share two generic parameters… <code>TTransformedValues</code> … defaults to <code>TFieldValues</code>」</p>
+
+<p>第三席がエラーの震源です。resolver の型も同じ三つを持ち、成功時の <code>values</code> に出力型が入ります。</p>
+
+<pre>export type Resolver&lt;
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues
+&gt; = (
+  values: TFieldValues,
+  context: TContext | undefined,
+  options: ResolverOptions&lt;TFieldValues&gt;
+) =&gt; ResolverResult&lt;TFieldValues, TTransformedValues&gt; | Promise&lt;…&gt;;
+
+export type ResolverSuccess&lt;TTransformedValues&gt; = {
+  values: TTransformedValues;
+  errors: Record&lt;string, never&gt;;
+};</pre>
+<p class="src">出典: <code>node_modules/react-hook-form/dist/types/resolvers.d.ts</code>（今日読んだ実ファイル）</p>
+
+<p>そして <code>UseFormProps</code> は、その resolver を <code>_options.resolver</code> として <code>Control</code> の中にしまっています。赤い波線が <code>_options.resolver</code> の話を始めるのは、ここが原因です。フィールド名でも <code>name</code> の文字列でもなく、<b>箱の中に入っている検証関数の戻り値の型</b>が食い違っている。</p>
+
+<pre>export type UseFormProps&lt;…, TTransformedValues = TFieldValues&gt; = Partial&lt;{
+  resolver: Resolver&lt;TFieldValues, TContext, TTransformedValues&gt;;
+  context: TContext;
+  <span class="tok-c">/* … */</span>
+}&gt;;</pre>
+<p class="src">出典: 同 <code>form.d.ts</code> 61 行付近</p>
+
+<h2 id="s3"><span class="num">3</span>直感 — 犬の箱を動物の箱としては渡せない</h2>
+
+<p>TypeScript の generic には、三つのはたらき方があります。公式ハンドブックはそれを「分散（variance）」と呼び、こう図示できる関係です。</p>
+
+<div class="states">
+  <div class="state-box cov">
+    <div class="nm">共変 out T</div>
+    <div class="dsc"><code>get: () =&gt; T</code><br>犬を作る機械は、動物を作る機械として使える</div>
+  </div>
+  <div class="arrow"><div class="ln">↔</div><div class="lb">同じ T が<br>両方に出ると</div></div>
+  <div class="state-box inv">
+    <div class="nm">不変 in out T</div>
+    <div class="dsc"><code>get</code> と <code>set</code> の両方<br>犬の箱 ≠ 動物の箱</div>
+  </div>
+  <div class="arrow"><div class="ln">↔</div><div class="lb">受け取るだけ<br>なら逆向き</div></div>
+  <div class="state-box con">
+    <div class="nm">反変 in T</div>
+    <div class="dsc"><code>set: (v: T) =&gt; void</code><br>動物を受け取る関数は、犬を受け取る関数として使える</div>
+  </div>
+</div>
+<p class="src">出典: <a href="https://www.typescriptlang.org/docs/handbook/2/generics.html#variance-annotations">TypeScript Handbook — Variance Annotations</a>（TS 4.7 リリースノートの <code>in</code> / <code>out</code> / <code>in out</code> と同じ説明）</p>
+
+<p>今日、同じ関係を最小の型で測りました。</p>
+
+<pre>type Animal = { kind: <span class="tok-s">'animal'</span> };
+type Dog = Animal &amp; { bark: <span class="tok-k">true</span> };
+
+type Box&lt;T&gt; = { get: () =&gt; T; set: (value: T) =&gt; void };
+type Producer&lt;T&gt; = { get: () =&gt; T };
+type Consumer&lt;T&gt; = { set: (value: T) =&gt; void };
+
+<span class="tok-k">declare const</span> dogBox: Box&lt;Dog&gt;;
+<span class="tok-k">declare const</span> animalBox: Box&lt;Animal&gt;;
+
+<span class="tok-k">const</span> a: Box&lt;Animal&gt; = dogBox;     <span class="tok-c">// NG  不変</span>
+<span class="tok-k">const</span> b: Box&lt;Dog&gt; = animalBox;     <span class="tok-c">// NG  不変</span>
+<span class="tok-k">const</span> c: Producer&lt;Animal&gt; = dogBox; <span class="tok-c">// OK  共変</span>
+<span class="tok-k">const</span> d: Consumer&lt;Dog&gt; = animalBox; <span class="tok-c">// OK  反変</span></pre>
+<p class="src">実測: TypeScript 6.0.3。エラーは <code>variance-toy.ts</code> 11–12 行のみ。13–14 行は無言で通過した</p>
+
+<p><code>Control</code> は <code>Box</code> に近いです。入力の形を読み書きし（<code>register</code> / <code>_formState</code>）、同時に「検証後の出力」を知る関数（<code>handleSubmit</code> と <code>_options.resolver</code>）も持っている。出力の型 <code>TTransformedValues</code> は、resolver の<b>戻り値</b>にも、<code>handleSubmit</code> が受け取るコールバックの<b>引数</b>にも現れます。出し入れの両方に顔を出す型引数は、構造的に不変に近づきます。</p>
+
+<p>だから次の代入は、犬と動物ほど明らかな親子関係があっても、形が違えば落ちます。</p>
+
+<div class="flow">
+  <p class="cap">起きていること — 親が持っている箱と、子が欲しがっている箱</p>
+  <div class="flow-row">
+    <div class="card in">
+      <div class="who">親 useForm</div>
+      <div class="ttl">Control&lt;入力, unknown, 出力&gt;</div>
+      <div class="ex">入力: { name, billingMethodType }
+出力: { name, billing_method_type }</div>
+    </div>
+    <div class="arrow-col">
+      <div class="ln">→</div>
+      props で渡す
+    </div>
+    <div class="card slot">
+      <div class="who">子 InputRHF</div>
+      <div class="ttl">control: Control&lt;T&gt;</div>
+      <div class="ex">省略された第 3 席は
+デフォルトで T と同じ
+＝ Control&lt;入力, any, 入力&gt;</div>
+    </div>
+  </div>
+</div>
+
+<p>子は「入力の形だけ知っている箱」を欲しがっています。親が渡そうとしているのは「入力の形と、送信の形の両方を知っている箱」です。TypeScript は、この二つを同じ箱とは認めません。赤い波線は、入力欄の <code>name</code> が間違っていると言っているのではありません。<b>箱の刻印が違う</b>と言っているのです。</p>
+
+<div class="callout warn">
+  <span class="label">よくある誤解</span>
+  <p>エラーメッセージに discriminated union の展開（<code>{ billingMethodType: "monthly_closing" } | { … "on_demand" }</code>）が長く出るので、「union が複雑だから型が壊れた」と思いがちです。今日の実験では、union を使わないただのオブジェクト <code>{ name, billingMethodType }</code> → <code>{ name, billing_method_type }</code> でも、<b>同じ</b> <code>_options.resolver</code> エラーが出ました。union はメッセージを読みにくくしているだけで、原理ではありません。</p>
+</div>
+
+<h2 id="s4"><span class="num">4</span>仕組み — 今日測った代入表</h2>
+
+<p>実験は RHF 7.85.0 の型だけを import し、フォーム実装は一切含みません。コンパイラはプロジェクトの TypeScript 6.0.3 です。各行は「この代入は通るか」だけを見ています。</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>代入</th>
+      <th>結果</th>
+      <th>読み方</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Control&lt;In, unknown, Out&gt;</code> → <code>Control&lt;In&gt;</code></td>
+      <td class="fail">NG</td>
+      <td>今日の本体。第 3 席が違う</td>
+    </tr>
+    <tr>
+      <td><code>Control&lt;In, any, Out&gt;</code> → <code>Control&lt;In&gt;</code></td>
+      <td class="fail">NG</td>
+      <td>第 2 席を揃えても落ちる。犯人は第 3 席</td>
+    </tr>
+    <tr>
+      <td><code>Control&lt;In, unknown, In&gt;</code> → <code>Control&lt;In&gt;</code></td>
+      <td class="pass">OK</td>
+      <td>出力が入力と同じなら、<code>unknown</code> 対 <code>any</code> は問題にならない</td>
+    </tr>
+    <tr>
+      <td><code>Control&lt;In, unknown, Out&gt;</code> → <code>Control&lt;In, any, Out&gt;</code></td>
+      <td class="pass">OK</td>
+      <td>第 3 席が同じなら、第 2 席の <code>unknown</code> → <code>any</code> は通る</td>
+    </tr>
+    <tr>
+      <td><code>Control&lt;In, unknown, Out&gt;</code> → 同じ三つの型</td>
+      <td class="pass">OK</td>
+      <td>刻印が完全一致すれば何も起きない</td>
+    </tr>
+    <tr>
+      <td><code>Control&lt;In&gt;</code> ↔ <code>Control&lt;FieldValues&gt;</code></td>
+      <td class="fail">NG / NG</td>
+      <td>第 1 席も不変。狭い型と広い型は双方向に拒否</td>
+    </tr>
+    <tr>
+      <td><code>takeControlT(controlInUnknownOut)</code><br>（引数型 <code>Control&lt;T&gt;</code>）</td>
+      <td class="fail">NG</td>
+      <td>このリポジトリの <code>InputRHF</code> と同じ形</td>
+    </tr>
+    <tr>
+      <td><code>takeControlTOut(controlInUnknownOut)</code><br>（引数型 <code>Control&lt;T, any, TOut&gt;</code>）</td>
+      <td class="pass">OK</td>
+      <td>第 3 席を開いておけば推論が揃う</td>
+    </tr>
+    <tr>
+      <td><code>useWatch({ control: controlInUnknownOut })</code></td>
+      <td class="pass">OK</td>
+      <td>RHF 本体は第 3 席を開いている</td>
+    </tr>
+    <tr>
+      <td><code>Resolver&lt;In, unknown, Out&gt;</code> → <code>Resolver&lt;In&gt;</code></td>
+      <td class="fail">NG</td>
+      <td>エラーメッセージの最初の段と同じ食い違い</td>
+    </tr>
+    <tr>
+      <td>discriminated union 版の同じ代入</td>
+      <td class="fail">NG</td>
+      <td>単純オブジェクト版と同じ。union は必須条件ではない</td>
+    </tr>
+    <tr>
+      <td><code>Control&lt;In, unknown, In &amp; { extra }&gt;</code> → <code>Control&lt;In&gt;</code></td>
+      <td class="pass">OK</td>
+      <td>出力が入力の<b>部分型</b>なら、resolver の戻りは共変なので通ることがある</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p class="src">実測ログ: <code>/tmp/2026-08-28-rhf-control-variance-experiment/</code> を TypeScript 6.0.3 で <code>tsc --noEmit</code>。失敗行の先頭はすべて <code>TS2322</code> または <code>TS2345</code></p>
+
+<div class="callout">
+  <span class="label">最後の行が教えること</span>
+  <p>「第 3 席は常に完全一致が要る」は、正確ではありません。TypeScript は <code>Control</code> をラベルで比べるのではなく、中のプロパティを構造的に比べます。resolver の <code>TTransformedValues</code> は戻り値にしか出ないので<b>共変</b>です。出力が入力の部分型なら、その段は通ります。取引先フォームの出力 <code>ClientRequestBody</code> はキー名が違う（<code>billingMethodType</code> 対 <code>billing_method_type</code>）ので部分型ではなく、そこで落ちます。</p>
+</div>
+
+<h3>エラーメッセージを上から読む</h3>
+
+<p>今日の失敗ログの典型は、次の階段です。</p>
+
+<pre>Type 'Control&lt;FormIn, unknown, FormOut&gt;' is not assignable to type 'Control&lt;FormIn&gt;'.
+  The types of '_options.resolver' are incompatible between these types.
+    Type 'Resolver&lt;FormIn, unknown, FormOut&gt; | undefined'
+      is not assignable to type 'Resolver&lt;FormIn, any, FormIn&gt; | undefined'.
+        Type 'ResolverSuccess&lt;FormOut&gt;' is not assignable to type 'ResolverSuccess&lt;FormIn&gt;'.
+          Property 'billingMethodType' is missing in type 'FormOut'
+            but required in type 'FormIn'.</pre>
+
+<p>最後の一文が本体です。resolver は成功すると <code>{ values: 出力 }</code> を返します。受け取る側は <code>{ values: 入力 }</code> を期待している。出力に <code>billingMethodType</code> が無い——つまり<b>変換後の形を、変換前の形としては受け取れない</b>。それが「<code>control</code> が渡せない」の中身です。</p>
+
+<p>同じ食い違いは <code>handleSubmit</code> 単体でも再現します。</p>
+
+<pre>Type 'UseFormHandleSubmit&lt;FormIn, FormOut&gt;'
+  is not assignable to type 'UseFormHandleSubmit&lt;FormIn&gt;'.
+    Types of parameters 'onValid' and 'onValid' are incompatible.
+      Property 'billingMethodType' is missing in type 'FormOut'.</pre>
+<p class="src">実測: 実験ファイル G3。こちらは引数側（反変）から同じ事実を見ている</p>
+
+<details class="measure">
+  <summary>
+    <span class="badge ng">NG</span>
+    <span>生ログ — <code>Control&lt;In, unknown, Out&gt; = Control&lt;In&gt;</code>（実験 A1）</span>
+  </summary>
+  <div class="body">
+<pre>experiment.ts(40,14): error TS2322:
+Type 'Control&lt;FormIn, unknown, FormOut&gt;' is not assignable to type 'Control&lt;FormIn&gt;'.
+  The types of '_options.resolver' are incompatible between these types.
+    Type 'Resolver&lt;FormIn, unknown, FormOut&gt; | undefined'
+      is not assignable to type 'Resolver&lt;FormIn, any, FormIn&gt; | undefined'.
+        Type 'ResolverSuccess&lt;FormOut&gt;' is not assignable to type 'ResolverSuccess&lt;FormIn&gt;'.
+          Property 'billingMethodType' is missing in type 'FormOut'
+            but required in type 'FormIn'.</pre>
+  </div>
+</details>
+
+<h3>なぜ useWatch は怒らず、InputRHF は怒るのか</h3>
+
+<p>RHF 本体のフックは、すでに第 3 席を開けています。</p>
+
+<pre><span class="tok-c">// useWatch.d.ts — 第 3 席が残っている</span>
+control?: Control&lt;TFieldValues, any, TTransformedValues&gt;;
+
+<span class="tok-c">// Controller / useController も同じ</span>
+control?: Control&lt;TFieldValues, any, TTransformedValues&gt;;</pre>
+<p class="src">出典: <code>node_modules/react-hook-form/dist/useWatch.d.ts</code> 26 行、同 <code>types/controller.d.ts</code> の <code>UseControllerProps</code></p>
+
+<p>今日の実験でも <code>useWatch({ control: controlInUnknownOut, name: 'name' })</code> は無言で通過しました。同じオブジェクトを <code>(c: Control&lt;T&gt;) =&gt; void</code> に渡すと落ちます。</p>
+
+<p>差は実行時の振る舞いではありません。差は<b>受け口の型が第 3 席を覚えているかどうか</b>だけです。<code>Controller</code> に直接渡せば通るものが、その外側を <code>control: Control&lt;T&gt;</code> で包んだ瞬間に落ちる。包んだ人（このリポジトリでは <code>InputRHF</code>）が、RHF が開けておいた席を閉じてしまっている。</p>
+
+<div class="callout ok">
+  <span class="label">公式が書いてある直し方</span>
+  <p>RHF の PR <a href="https://github.com/react-hook-form/react-hook-form/pull/11913">#11913</a>（「Default <code>TTransformedValues</code> generics to <code>TFieldValues</code>」）は、ラッパーを書く人への移行をこう示しています。第 3 席を追加して、そのまま転送する。</p>
+</div>
+
+<pre>interface ControlledInputProps&lt;
+  T extends FieldValues,
+  N extends FieldPath&lt;T&gt;,
+  U = T,                 <span class="tok-c">// 追加</span>
+&gt; {
+  control: Control&lt;T, any, U&gt;;  <span class="tok-c">// Control&lt;T&gt; から広げる</span>
+}</pre>
+<p class="src">出典: <a href="https://github.com/react-hook-form/react-hook-form/pull/11913">github.com/react-hook-form/react-hook-form/pull/11913</a> 本文の migration patch。この PR 自体は stale close されたが、同じデフォルト（<code>TTransformedValues = TFieldValues</code>、かつ出力が入力と違う形でもよい）は後続の <a href="https://github.com/react-hook-form/react-hook-form/pull/11951">#11951</a> / <a href="https://github.com/react-hook-form/react-hook-form/commit/7aed67d5c9b63264154adcf8a76c83a7d8e8e57b">#12638</a> 経由で 7.85.0 の型に入っている</p>
+
+<div class="callout unverified">
+  <span class="label">未検証</span>
+  <p>zumen-fe 全体の <code>pnpm typecheck</code> は、この解説を書くために走らせていません。IDE 上の <code>ClientForm.tsx</code> 214 行の波線が、孤立実験と<b>文字通り同じ</b>階段かどうかは、エディタの診断を開いて突き合わせてください。階段の形（<code>Control&lt;…, ClientRequestBody&gt;</code> が <code>Control&lt;…&gt;</code> に入らず、<code>_options.resolver</code> が先に怒られる）は、型定義と孤立実験から十分に説明できます。</p>
+</div>
+
+<h2 id="s5"><span class="num">5</span>このコードベースでは</h2>
+
+<p>取引先の追加・編集モーダルは、この原理をそのまま踏んでいます。</p>
+
+<h3>親は三つ書く</h3>
+
+<p><code>ClientFormProvider</code> は、Zod の discriminated union を入力型にし、送信直前の詰め替えを <code>transform</code> に載せ、RHF に三つ渡しています。</p>
+
+<pre><span class="tok-k">const</span> schema = z.discriminatedUnion(<span class="tok-s">'billingMethodType'</span>, [
+  monthlyClosingTypeSchema,
+  onDemandTypeSchema,
+]);
+
+<span class="tok-k">export type</span> ClientSchema = z.input&lt;<span class="tok-k">typeof</span> schema&gt;;
+
+<span class="tok-k">const</span> clientFormSubmitSchema = schema.transform(toRequestBody);
+
+<span class="tok-k">export const</span> useClientFormContext = () =&gt;
+  useFormContext&lt;ClientSchema, unknown, ClientRequestBody&gt;();
+
+<span class="tok-k">const</span> methods = useForm&lt;ClientSchema, unknown, ClientRequestBody&gt;({
+  resolver: zodResolver(clientFormSubmitSchema),
+  <span class="tok-c">/* … */</span>
+});</pre>
+<p class="src">出典: <code>src/views/settings/client_settings/components/create_or_edit_modal/ClientFormProvider.tsx</code> 110–145 行。コメントも「各項目は <code>ClientSchema</code>、送信時は <code>ClientRequestBody</code>」と書いている</p>
+
+<p><code>toRequestBody</code> は camelCase の入力を、API が欲しがる snake_case へ詰め替えます。<code>billingMethodType</code> は <code>billing_method_type</code> になり、Select の <code>{ label, value }</code> は <code>value</code> だけになります。入力と出力は部分型の関係にありません。今日の実験の <code>FormIn</code> / <code>FormOut</code> と同じ種類の分裂です。</p>
+<p class="src">出典: 同ファイル 154–204 行、および <code>src/types/clientRequestTypes.ts</code> の <code>ClientRequestBody</code></p>
+
+<h3>子は一つしか受け取らない</h3>
+
+<p><code>ClientForm</code> は context から取り出した <code>control</code> を、そのまま共有コンポーネントへ渡します。</p>
+
+<pre><span class="tok-k">const</span> { handleSubmit, control, … } = useClientFormContext();
+
+&lt;ClientFormInputWithLabel
+  control={control}
+  name=<span class="tok-s">"name"</span>
+/&gt;</pre>
+<p class="src">出典: <code>ClientForm.tsx</code> 66–70 行、213–218 行</p>
+
+<p>受け口はこうです。</p>
+
+<pre><span class="tok-k">type</span> Props&lt;T extends FieldValues&gt; = {
+  name: Path&lt;T&gt;;
+  control: Control&lt;T&gt;;
+  <span class="tok-c">/* … */</span>
+};</pre>
+<p class="src">出典: <code>src/views/settings/client_settings/shared/ClientFormInputWithLabel.tsx</code> 9–12 行。同じ形は <code>ClientFormTextareaWithLabel.tsx</code>、<code>src/components/forms/input/InputRHF.tsx</code> 21 行、<code>CheckboxGroupRHF.tsx</code> 17 行、<code>SelectRHF.tsx</code> 35 行</p>
+
+<p><code>src/components/forms</code> 配下を grep すると、<code>control: Control&lt;T&gt;</code> は 15 ファイルにあります。どれも第 3 席を閉じています。ほとんどの画面は <code>useForm&lt;Schema&gt;</code> か <code>useFormContext&lt;Schema&gt;</code> の<b>一つだけ</b>なので、第 3 席のデフォルトが <code>Schema</code> のまま残り、波線は出ません。</p>
+
+<p>三つ書く <code>useForm</code> は、少なくとも次の場所にあります。</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead>
+    <tr><th>ファイル</th><th>第 1 席</th><th>第 3 席</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ClientFormProvider.tsx</code></td>
+      <td><code>ClientSchema</code></td>
+      <td><code>ClientRequestBody</code></td>
+    </tr>
+    <tr>
+      <td><code>OrderSearchFormProvider.tsx</code></td>
+      <td><code>OrderSearchFormSchemaInput</code></td>
+      <td><code>OrderSearchFormSchema</code></td>
+    </tr>
+    <tr>
+      <td><code>OrderKanbanSettingFormProvider.tsx</code></td>
+      <td><code>z.input&lt;typeof schema&gt;</code></td>
+      <td><code>OrderKanbanSettingFormSchema</code></td>
+    </tr>
+    <tr>
+      <td><code>UpdateOrderStatusFormProvider.tsx</code></td>
+      <td><code>UpdateStatusFormSchema</code></td>
+      <td><code>UpdateStatusFormSubmitSchema</code></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p class="src">grep: <code>useForm&lt;</code> の複数行。案件検索側には「入力と出力を揃えれば <code>useForm&lt;Schema&gt;</code> に戻せる」という TODO がある（<code>src/zod_schema/orderSearchFormSchema.ts</code> 45–50 行）</p>
+
+<p>同じリポジトリの中で、二つの流派が同居しています。一つは「resolver で形を変えるなら三つ書け」（公式の推奨、取引先モーダル）。もう一つは「入力と出力を同じ型に揃えて、第三者を消す」（案件検索の TODO）。赤い波線は、前者を選んだ親が、後者の前提で書かれた子に <code>control</code> を渡したときにだけ現れます。</p>
+
+<div class="callout">
+  <span class="label">直し方の地図（実装はしていない）</span>
+  <p>原理から見える道は三つです。①共有コンポーネントの受け口を <code>Control&lt;T, any, TOut&gt;</code> に広げて第 3 席を転送する（PR #11913 の公式移行）。②resolver では形を変えず、送信ハンドラで <code>toRequestBody</code> する（第 3 席がデフォルトのまま残り、<code>Control&lt;T&gt;</code> と一致する）。③親の context を入力型だけに戻し、送信時だけ別関数で出力型を付ける（<code>ClientForm.tsx</code> 71 行にコメントアウトされた <code>useClientFormHandleSubmit</code> は、この方向を一度試した跡に見える）。</p>
+</div>
+
+<div class="callout unverified">
+  <span class="label">未検証</span>
+  <p><code>BillingTransactionForm</code> は同じ <code>FormProvider</code> の下で <code>useFormContext&lt;BillingTransactionFormValues&gt;()</code> と、より狭い型を名乗っています（<code>BillingTransactionForm.tsx</code> 34 行）。これが今 IDE で波線になっているかは測っていません。原理的には第 1 席の不変性（実験 C）の話で、第 3 席の話とは別件です。</p>
+</div>
+
+<h2 id="s6"><span class="num">6</span>理解度チェック（5 問）</h2>
+
+<p>いずれも「仕組み」で測った事実か、インストール済みの型定義に書いてあることです。勘ではなく、先の表を思い出してください。</p>
+
+<div id="quiz"></div>
+<div class="score" id="score">未回答</div>
+
+<footer>
+  <p>参照した一次情報</p>
+  <ul>
+    <li><a href="https://react-hook-form.com/ts">RHF TypeScript Support</a> — <code>TTransformedValues</code> の定義とデフォルト</li>
+    <li><a href="https://react-hook-form.com/docs/useform/handlesubmit">useForm / handleSubmit</a> — 三つ書く公式例</li>
+    <li><a href="https://github.com/react-hook-form/resolvers/blob/master/_autodocs/TYPES_AND_INTERFACES.md">@hookform/resolvers TYPES_AND_INTERFACES</a></li>
+    <li><a href="https://www.typescriptlang.org/docs/handbook/2/generics.html#variance-annotations">TypeScript Handbook: Variance Annotations</a></li>
+    <li><a href="https://github.com/react-hook-form/react-hook-form/pull/11913">RHF PR #11913</a> ラッパー移行パッチ</li>
+    <li>型定義: <code>node_modules/react-hook-form/dist/types/form.d.ts</code> / <code>resolvers.d.ts</code> / <code>controller.d.ts</code> / <code>useWatch.d.ts</code>（RHF 7.85.0）</li>
+    <li>実測: <code>/tmp/2026-08-28-rhf-control-variance-experiment/</code>（TypeScript 6.0.3）</li>
+    <li>リポジトリ: <code>ClientFormProvider.tsx</code> / <code>ClientForm.tsx</code> / <code>ClientFormInputWithLabel.tsx</code> / <code>InputRHF.tsx</code></li>
+  </ul>
+</footer>
+
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    q: 'インストール済み RHF 7.85.0 で、<code>Control&lt;T&gt;</code> とだけ書いたとき、省略された第 3 generic <code>TTransformedValues</code> は何になるか。',
+    opts: [
+      { t: '<code>unknown</code>', ok: false, fb: '第 2 席 <code>TContext</code> の省略時は <code>any</code> です。第 3 席のデフォルトはそれではありません。' },
+      { t: '<code>TFieldValues</code>（つまり <code>T</code> と同じ）', ok: true, fb: 'form.d.ts 654 行: <code>TTransformedValues = TFieldValues</code>。公式 TS ページも「defaults to TFieldValues」と書いています。だから <code>Control&lt;ClientSchema&gt;</code> は <code>Control&lt;ClientSchema, any, ClientSchema&gt;</code> です。' },
+      { t: '<code>never</code>（変換が無いことを表す）', ok: false, fb: '古い案にはそういう条件型もありましたが、7.85.0 ではデフォルトが <code>TFieldValues</code> です。' },
+      { t: '推論不能になり、その場で型エラーになる', ok: false, fb: 'デフォルトがあるので、書かなくてもエラーにはなりません。問題はデフォルトが「入力と同じ」になることです。' }
+    ]
+  },
+  {
+    q: '今日の実験で、<code>Control&lt;In, unknown, Out&gt;</code> を <code>Control&lt;In&gt;</code> に代入したとき、コンパイラが最初に指したプロパティはどれか。',
+    opts: [
+      { t: '<code>register</code>（フィールド名の登録）', ok: false, fb: '<code>register</code> は第 1 席だけを見ます。今日の失敗ログの一段目は <code>_options.resolver</code> でした。' },
+      { t: '<code>_options.resolver</code>', ok: true, fb: 'UseFormProps が resolver を <code>Resolver&lt;…, TTransformedValues&gt;</code> として抱えており、Control の <code>_options</code> がその型を持ち込みます。成功時の <code>values</code> が Out なのに In を要求される、という階段です。' },
+      { t: '<code>name</code> prop（"name" という文字列）', ok: false, fb: 'フィールド名の Path は第 1 席から決まります。今回の第 1 席は親子で同じ In なので、名前の検査までは到達しません。' },
+      { t: '<code>TContext</code>（unknown と any の違い）', ok: false, fb: '同じ実験の B1 / B3 は、第 3 席を揃えた状態で unknown→any が通ることを示しました。犯人は第 2 席ではありません。' }
+    ]
+  },
+  {
+    q: '親が <code>useForm&lt;In, unknown, Out&gt;</code> で取った <code>control</code> を子へ渡す。次のうち、今日の実験で<b>通った</b>受け口はどれか。',
+    opts: [
+      { t: '<code>(c: Control&lt;T&gt;) =&gt; void</code> に推論任せで渡す', ok: false, fb: '実験 D。これが InputRHF と同じ形で、TS2345 になりました。' },
+      { t: '<code>(c: Control&lt;In&gt;) =&gt; void</code> と明示して渡す', ok: false, fb: '明示しても第 3 席はデフォルトの In のままなので、同じく落ちます（実験 D の <code>takeControlT&lt;FormIn&gt;</code>）。' },
+      { t: '<code>useWatch({ control, name: \'name\' })</code>', ok: true, fb: 'useWatch の型は <code>Control&lt;TFieldValues, any, TTransformedValues&gt;</code> で第 3 席が開いています。今日の実験 F は無言で通過しました。怒っているのは RHF 本体ではなく、第 3 席を閉じたラッパーです。' },
+      { t: 'discriminated union をやめて単純なオブジェクト型にすれば、<code>Control&lt;T&gt;</code> でも通る', ok: false, fb: '実験 A1 は union を使わない単純な FormIn / FormOut です。それでも同じ _options.resolver エラーが出ました。' }
+    ]
+  },
+  {
+    q: 'RHF PR #11913 がラッパー作者に示した移行は、次のどれか。',
+    opts: [
+      { t: '<code>control</code> を <code>any</code> にする', ok: false, fb: '公式パッチは any 化ではなく、第 3 席を追加して転送しています。' },
+      { t: '<code>control: Control&lt;T&gt;</code> を <code>control: Control&lt;T, any, U&gt;</code> にし、U を generic で受け取る', ok: true, fb: 'PR 本文の patch そのものです。今日の実験 E（<code>takeControlTOut</code>）は、この受け口なら <code>Control&lt;In, unknown, Out&gt;</code> が通ることを測っています。' },
+      { t: '子コンポーネントを generic ではなく、具体的な ClientSchema に固定する', ok: false, fb: 'それでも <code>Control&lt;ClientSchema&gt;</code> は第 3 席が ClientSchema になるので、親が ClientRequestBody を刻んでいる限り落ちます。' },
+      { t: '<code>TTransformedValues</code> をやめて、常に入力型だけを使うよう RHF をダウングレードする', ok: false, fb: '第 3 席は「入力と出力が違う」ことを型で表すための機能です。消すと handleSubmit の成功値が入力型に固定されます。' }
+    ]
+  },
+  {
+    q: '今日の実験で <code>Control&lt;In, unknown, In &amp; { extra: number }&gt;</code> を <code>Control&lt;In&gt;</code> へ代入したところ、通った。この事実が意味するのはどれか。',
+    opts: [
+      { t: 'TypeScript は Control の第 3 席を、常に「完全一致」で比べている', ok: false, fb: '完全一致なら extra 付きは落ちるはずです。通ったので、ラベル比較ではなく構造比較です。' },
+      { t: 'resolver の TTransformedValues は戻り値位置にあり共変なので、出力が入力の部分型ならその段は通りうる', ok: true, fb: 'ResolverSuccess&lt;Out&gt; の values は Out です。Out が In の部分型なら values は In として渡せます。ClientRequestBody が落ちるのは、キー名が違い部分型ではないからです。' },
+      { t: '第 3 席は実行時には消えるので、部分型ならコンパイラも検査をサボる', ok: false, fb: 'generic はコンパイル時の話です。サボっているのではなく、共変の代入規則が成立しています。' },
+      { t: 'TContext が unknown だと検査が緩くなる副作用である', ok: false, fb: 'TContext を any に揃えた A3（出力が部分型ではない Out）は落ちています。緩くなったのは第 2 席ではありません。' }
+    ]
+  }
+];
+
+const quizEl = document.getElementById('quiz');
+const scoreEl = document.getElementById('score');
+let answered = 0, correct = 0;
+
+QUESTIONS.forEach((item, qi) => {
+  const box = document.createElement('div');
+  box.className = 'quiz';
+  const q = document.createElement('p');
+  q.className = 'q';
+  q.innerHTML = '<span class="qn">Q' + (qi + 1) + '</span>' + item.q;
+  box.appendChild(q);
+
+  const fb = document.createElement('div');
+  fb.className = 'fb';
+
+  item.opts.forEach((opt) => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.type = 'button';
+    btn.innerHTML = opt.t;
+    btn.addEventListener('click', () => {
+      if (box.dataset.done) return;
+      box.dataset.done = '1';
+      answered++;
+      if (opt.ok) correct++;
+      Array.from(box.querySelectorAll('.opt')).forEach((b, bi) => {
+        b.disabled = true;
+        if (item.opts[bi].ok) b.classList.add('correct');
+      });
+      if (!opt.ok) btn.classList.add('wrong');
+      fb.className = 'fb show ' + (opt.ok ? 'good' : 'bad');
+      fb.innerHTML = (opt.ok ? '&#9989; ' : '&#10060; ') + opt.fb;
+      updateScore();
+    });
+    box.appendChild(btn);
+  });
+
+  box.appendChild(fb);
+  quizEl.appendChild(box);
+});
+
+function updateScore() {
+  if (answered < QUESTIONS.length) {
+    scoreEl.innerHTML = '回答済み <b>' + answered + '</b> / ' + QUESTIONS.length;
+    return;
+  }
+  let msg;
+  if (correct === 5) msg = '&#127881; 完璧です。赤い波線はフィールドではなく、箱の第 3 席の話でした。';
+  else if (correct >= 3) msg = '&#128077; いい線です。間違えた問題のフィードバックと、代入表をもう一度どうぞ。';
+  else msg = '&#128218; 「仕組み」の代入表と、エラー階段（_options.resolver）をもう一度辿ってみてください。';
+  scoreEl.innerHTML = '<b>' + correct + ' / ' + QUESTIONS.length + '</b> 正解<br>' + msg;
+}
+</script>
+</body>
+</html>
