@@ -215,7 +215,7 @@ function normalizeManifest(value) {
 
   const articles = [];
 
-  // Stable manifest order becomes the visible ledger folio order.
+  // Stable manifest order becomes the visible notebook folio order.
   for (let index = 0; index < value.articles.length; index += 1) {
     articles.push(normalizeArticle(value.articles[index], index));
   }
@@ -471,7 +471,7 @@ function renderCategories() {
 function renderResultSummary(resultCount) {
   const filters = [];
 
-  // Only active constraints appear in the compact ledger summary.
+  // Only active constraints appear in the compact index summary.
   if (state.query) {
     filters.push("Title: “" + state.query + "”");
   }
@@ -495,7 +495,7 @@ function renderResultSummary(resultCount) {
     "</span>";
 }
 
-/** Produces escaped article metadata for one visible ledger row; called by renderArticle. @param {object} article Normalized article. @returns {string} Safe metadata markup. @example renderArticleMeta(article) */
+/** Produces escaped article metadata for one visible index row; called by renderArticle. @param {object} article Normalized article. @returns {string} Safe metadata markup. @example renderArticleMeta(article) */
 function renderArticleMeta(article) {
   let markup = "";
 
@@ -515,6 +515,19 @@ function renderArticleMeta(article) {
     markup += "<span>" + String(article.readingMinutes) + " min read</span>";
   }
 
+  const contextParts = [article.type];
+
+  // Source is optional because many personal notes have no external repository.
+  if (article.source) {
+    contextParts.push(article.source);
+  }
+
+  // Type and source remain available beneath the title without competing with it.
+  markup +=
+    '<span class="article-context">' +
+    escapeHtml(contextParts.join(" · ")) +
+    "</span>";
+
   // Every category remains visible even when a row was reached through another subject.
   for (const category of article.categories) {
     markup += '<span class="tag">' + escapeHtml(category) + "</span>";
@@ -527,15 +540,8 @@ function renderArticleMeta(article) {
   return markup;
 }
 
-/** Builds one fully escaped ledger row from a normalized manifest record; called by renderArticles. @param {object} article Normalized article. @param {boolean} isFeatured Whether this is the page's lead row. @returns {string} Safe article markup. @example renderArticle(article, true) */
+/** Builds one fully escaped index row from a normalized manifest record; called by renderArticles. @param {object} article Normalized article. @param {boolean} isFeatured Whether this is the page's lead row. @returns {string} Safe article markup. @example renderArticle(article, true) */
 function renderArticle(article, isFeatured) {
-  const kickerParts = [article.type];
-
-  // Source is optional because many personal notes have no external repository.
-  if (article.source) {
-    kickerParts.push(article.source);
-  }
-
   const safeTitle = escapeHtml(article.title);
   const titleMarkup = article.href
     ? '<a class="article-title" data-pretext href="' +
@@ -558,9 +564,6 @@ function renderArticle(article, isFeatured) {
     String(article.sequence).padStart(2, "0") +
     "</div>" +
     '<div class="article-body">' +
-    '<p class="article-kicker">' +
-    escapeHtml(kickerParts.join(" · ")) +
-    "</p>" +
     '<h3 class="article-heading">' +
     titleMarkup +
     "</h3>" +
@@ -581,10 +584,10 @@ function renderArticles(filtered) {
   const start = (state.page - 1) * state.pageSize;
   const visible = filtered.slice(start, start + state.pageSize);
 
-  // Quiet dates and unmatched titles explain how to recover the full ledger.
+  // Quiet dates and unmatched titles explain how to recover the full index.
   if (visible.length === 0) {
     elements.articleList.innerHTML =
-      '<div class="empty-state"><strong>No ledger entry.</strong><p>Try another day, subject, or title. Clear all restores the complete archive.</p></div>';
+      '<div class="empty-state"><strong>No matching note.</strong><p>Try another day, subject, or title. Clear all restores the complete archive.</p></div>';
     return;
   }
 
@@ -616,7 +619,7 @@ function renderPagination(pageCount) {
     String(state.page - 1) +
     '" aria-label="Previous page"' +
     (state.page === 1 ? " disabled" : "") +
-    ">←</button>";
+    ">Previous</button>";
 
   // Every page remains directly reachable; flex wrapping keeps long archives usable.
   for (let page = 1; page <= pageCount; page += 1) {
@@ -637,7 +640,7 @@ function renderPagination(pageCount) {
     String(state.page + 1) +
     '" aria-label="Next page"' +
     (state.page === pageCount ? " disabled" : "") +
-    ">→</button>";
+    ">Next</button>";
   elements.pagination.innerHTML = markup;
 }
 
@@ -650,7 +653,7 @@ function renderCalendar() {
   const publishedDates = new Set();
   let markup = "";
 
-  // Only dated records create rust publication dots.
+  // Only dated records create blue publication marks.
   for (const article of state.articles) {
     if (article.published) {
       publishedDates.add(article.published);
@@ -805,7 +808,7 @@ function renderLoadingState() {
   elements.resultSummary.innerHTML =
     "<span><strong>—</strong> loading entries</span><span>Committed HTML documents</span>";
   elements.articleList.innerHTML =
-    '<div class="loading-state" role="status"><span class="loading-rule" aria-hidden="true"></span><strong>Opening the ledger…</strong><p>Reading the generated article index.</p></div>';
+    '<div class="loading-state" role="status"><span class="loading-rule" aria-hidden="true"></span><strong>Opening the index…</strong><p>Reading the generated article index.</p></div>';
   elements.pagination.innerHTML = "";
   elements.clearButton.disabled = true;
 }
@@ -817,7 +820,7 @@ function renderErrorState() {
   elements.resultSummary.innerHTML =
     "<span><strong>00</strong> entries available</span><span>Index unavailable</span>";
   elements.articleList.innerHTML =
-    '<div class="error-state" role="alert"><strong>The ledger could not open.</strong><p>The generated article index is unavailable. Try loading it again.</p><button class="retry-button" id="retry-button" type="button">Try again</button></div>';
+    '<div class="error-state" role="alert"><strong>The index could not open.</strong><p>The generated article index is unavailable. Try loading it again.</p><button class="retry-button" id="retry-button" type="button">Try again</button></div>';
   elements.pagination.innerHTML = "";
   elements.clearButton.disabled = true;
 }

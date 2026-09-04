@@ -1,0 +1,503 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T14:51:24Z",
+  "title": "Design System: Laststance Archive",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Ruled Canvas",
+        "canonical": "#f1f0e9",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Open Sheet",
+        "canonical": "#f8f7f1",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Graphite Ink",
+        "canonical": "#202521",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "quiet": {
+        "role": "neutral",
+        "displayName": "Pencil Note",
+        "canonical": "#5f665f",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint Rule",
+        "canonical": "#d8dbd4",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Notebook Rule",
+        "canonical": "#aeb5ae",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Rule",
+        "canonical": "#747d75",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "mineral-blue": {
+        "role": "primary",
+        "displayName": "Mineral Blue",
+        "canonical": "#315c8a",
+        "tonalRamp": [
+          "oklch(97% 0.014 250)",
+          "oklch(91% 0.026 250)",
+          "oklch(82% 0.050 250)",
+          "oklch(70% 0.078 250)",
+          "oklch(58% 0.092 250)",
+          "oklch(48% 0.086 250)",
+          "oklch(38% 0.074 250)",
+          "oklch(28% 0.058 250)"
+        ]
+      },
+      "mineral-blue-soft": {
+        "role": "primary",
+        "displayName": "Washed Mineral Blue",
+        "canonical": "#e1e9f1",
+        "tonalRamp": [
+          "oklch(97% 0.014 250)",
+          "oklch(91% 0.026 250)",
+          "oklch(82% 0.050 250)",
+          "oklch(70% 0.078 250)",
+          "oklch(58% 0.092 250)",
+          "oklch(48% 0.086 250)",
+          "oklch(38% 0.074 250)",
+          "oklch(28% 0.058 250)"
+        ]
+      },
+      "mineral-blue-ink": {
+        "role": "primary",
+        "displayName": "Deep Mineral Ink",
+        "canonical": "#244a73",
+        "tonalRamp": [
+          "oklch(97% 0.014 250)",
+          "oklch(91% 0.026 250)",
+          "oklch(82% 0.050 250)",
+          "oklch(70% 0.078 250)",
+          "oklch(58% 0.092 250)",
+          "oklch(48% 0.086 250)",
+          "oklch(38% 0.074 250)",
+          "oklch(28% 0.058 250)"
+        ]
+      },
+      "danger": {
+        "role": "error",
+        "displayName": "Correction Red",
+        "canonical": "#9a382e",
+        "tonalRamp": [
+          "oklch(97% 0.014 25)",
+          "oklch(91% 0.035 25)",
+          "oklch(82% 0.070 25)",
+          "oklch(70% 0.115 25)",
+          "oklch(58% 0.145 25)",
+          "oklch(48% 0.135 25)",
+          "oklch(38% 0.110 25)",
+          "oklch(28% 0.075 25)"
+        ]
+      },
+      "dark-canvas": {
+        "role": "neutral",
+        "displayName": "Dark Ruled Canvas",
+        "canonical": "#171b18",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-sheet": {
+        "role": "neutral",
+        "displayName": "Dark Open Sheet",
+        "canonical": "#1e231f",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-ink": {
+        "role": "neutral",
+        "displayName": "Dark Graphite Ink",
+        "canonical": "#eef1eb",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-quiet": {
+        "role": "neutral",
+        "displayName": "Dark Pencil Note",
+        "canonical": "#abb2ab",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-faint": {
+        "role": "neutral",
+        "displayName": "Dark Faint Rule",
+        "canonical": "#323a34",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-rule": {
+        "role": "neutral",
+        "displayName": "Dark Notebook Rule",
+        "canonical": "#4d5850",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-rule-strong": {
+        "role": "neutral",
+        "displayName": "Dark Strong Rule",
+        "canonical": "#778279",
+        "tonalRamp": [
+          "oklch(98% 0.008 105)",
+          "oklch(94% 0.009 105)",
+          "oklch(86% 0.010 105)",
+          "oklch(74% 0.012 105)",
+          "oklch(60% 0.013 105)",
+          "oklch(46% 0.014 105)",
+          "oklch(32% 0.013 105)",
+          "oklch(20% 0.012 105)"
+        ]
+      },
+      "dark-mineral-blue": {
+        "role": "primary",
+        "displayName": "Dark Mineral Blue",
+        "canonical": "#86add1",
+        "tonalRamp": [
+          "oklch(97% 0.014 250)",
+          "oklch(91% 0.026 250)",
+          "oklch(82% 0.050 250)",
+          "oklch(70% 0.078 250)",
+          "oklch(58% 0.092 250)",
+          "oklch(48% 0.086 250)",
+          "oklch(38% 0.074 250)",
+          "oklch(28% 0.058 250)"
+        ]
+      },
+      "dark-mineral-blue-soft": {
+        "role": "primary",
+        "displayName": "Dark Washed Mineral Blue",
+        "canonical": "#26394b",
+        "tonalRamp": [
+          "oklch(97% 0.014 250)",
+          "oklch(91% 0.026 250)",
+          "oklch(82% 0.050 250)",
+          "oklch(70% 0.078 250)",
+          "oklch(58% 0.092 250)",
+          "oklch(48% 0.086 250)",
+          "oklch(38% 0.074 250)",
+          "oklch(28% 0.058 250)"
+        ]
+      },
+      "dark-mineral-blue-ink": {
+        "role": "primary",
+        "displayName": "Dark Deep Mineral Ink",
+        "canonical": "#a9c9e6",
+        "tonalRamp": [
+          "oklch(97% 0.014 250)",
+          "oklch(91% 0.026 250)",
+          "oklch(82% 0.050 250)",
+          "oklch(70% 0.078 250)",
+          "oklch(58% 0.092 250)",
+          "oklch(48% 0.086 250)",
+          "oklch(38% 0.074 250)",
+          "oklch(28% 0.058 250)"
+        ]
+      },
+      "dark-danger": {
+        "role": "error",
+        "displayName": "Dark Correction Red",
+        "canonical": "#ef9e95",
+        "tonalRamp": [
+          "oklch(97% 0.014 25)",
+          "oklch(91% 0.035 25)",
+          "oklch(82% 0.070 25)",
+          "oklch(70% 0.115 25)",
+          "oklch(58% 0.145 25)",
+          "oklch(48% 0.135 25)",
+          "oklch(38% 0.110 25)",
+          "oklch(28% 0.075 25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The single page-level retrieval question."
+      },
+      "headline": {
+        "displayName": "Article Headline",
+        "purpose": "Scannable article titles in the main index."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Explanatory copy and article excerpts."
+      },
+      "label": {
+        "displayName": "Index Label",
+        "purpose": "Subjects, rail headings, counts, and compact controls."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "search-rule",
+        "value": "320ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Expands the mineral-blue search rule on focus."
+      },
+      {
+        "name": "index-selection",
+        "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Draws active subject underlines."
+      },
+      {
+        "name": "state-change",
+        "value": "180ms ease-out",
+        "purpose": "Handles article field and link-tick feedback."
+      },
+      {
+        "name": "loading-trace",
+        "value": "1.15s cubic-bezier(0.45, 0, 0.55, 1)",
+        "purpose": "Moves the temporary index loading trace."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "430px"
+      },
+      {
+        "name": "stacked",
+        "value": "760px"
+      },
+      {
+        "name": "two-column",
+        "value": "1080px"
+      },
+      {
+        "name": "wide-gutter",
+        "value": "1440px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "The primary retrieval control, used once above the index.",
+      "html": "<label class=\"ds-search\"><span class=\"ds-search-label\">Search article titles</span><input class=\"ds-search-input\" type=\"search\" placeholder=\"Remember a word…\"></label>",
+      "css": ".ds-search { position: relative; display: block; color: var(--ink); font-family: var(--font); } .ds-search::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--blue); content: \"\"; transform: scaleX(.08); transform-origin: left; transition: transform 320ms cubic-bezier(.16,1,.3,1); } .ds-search:focus-within::after { transform: scaleX(1); } .ds-search-label { display: block; margin-bottom: 5px; color: var(--blue-ink); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; } .ds-search-input { width: 100%; min-height: 52px; padding: 0 38px 4px 0; border: 0; border-bottom: 1px solid var(--rule-strong); outline: 0; background: transparent; color: var(--ink); font: 500 1.6rem/1.2 var(--font); letter-spacing: -.025em; } .ds-search:hover .ds-search-input { border-bottom-color: var(--blue); } .ds-search-input::placeholder { color: var(--quiet); opacity: 1; } .ds-search-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }"
+    },
+    {
+      "name": "Clear Filters Button",
+      "kind": "button",
+      "refersTo": "button-clear",
+      "description": "A quiet text action shown beside the search field.",
+      "html": "<button class=\"ds-clear\" type=\"button\">Clear filters</button>",
+      "css": ".ds-clear { min-height: 44px; padding: 0 2px; border: 0; border-bottom: 1px solid currentColor; border-radius: 0; background: transparent; color: var(--blue-ink); font: 700 13px/1.2 var(--font); cursor: pointer; } .ds-clear:hover { border-bottom-width: 2px; } .ds-clear:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; } .ds-clear:active { color: var(--blue); } .ds-clear:disabled { color: var(--quiet); cursor: default; opacity: .45; }"
+    },
+    {
+      "name": "Subject Tab",
+      "kind": "nav",
+      "refersTo": "subject-tab",
+      "description": "A subject filter that becomes an auto-width horizontal tab on compact screens.",
+      "html": "<button class=\"ds-subject\" type=\"button\" aria-pressed=\"true\"><span>TypeScript</span><span class=\"ds-subject-count\">2</span></button>",
+      "css": ".ds-subject { position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; width: 174px; min-height: 46px; padding: 0; border: 0; border-bottom: 1px solid var(--faint); border-radius: 0; background: transparent; color: var(--ink); font-family: var(--font); text-align: left; cursor: pointer; } .ds-subject::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--blue); content: \"\"; transform: scaleX(0); transform-origin: left; transition: transform 220ms cubic-bezier(.16,1,.3,1); } .ds-subject:hover::after, .ds-subject[aria-pressed=\"true\"]::after { transform: scaleX(1); } .ds-subject[aria-pressed=\"true\"] { color: var(--blue-ink); font-weight: 700; } .ds-subject:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; } .ds-subject-count { color: var(--quiet); font-size: 12px; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Article Index Row",
+      "kind": "custom",
+      "refersTo": "article-index-row",
+      "description": "The central archive record, optimized for title recognition before metadata.",
+      "html": "<article class=\"ds-article\"><span class=\"ds-folio\">03</span><div class=\"ds-article-body\"><h3 class=\"ds-article-title\"><a href=\"#\">CSS Anchor Positioning, Hands On</a></h3><p class=\"ds-article-excerpt\">A practical note from the standalone archive.</p><p class=\"ds-article-meta\"><time>2026-07-29</time><span>Guide · Laststance</span></p></div></article>",
+      "css": ".ds-article { display: grid; grid-template-columns: 46px minmax(0,1fr); gap: 18px; padding: 27px 0 29px; border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink); font-family: var(--font); transition: background-color 180ms ease-out, border-color 180ms ease-out; } .ds-article:hover, .ds-article:focus-within { border-color: var(--blue); background: color-mix(in srgb, var(--blue-soft) 54%, transparent); } .ds-folio { padding-top: 3px; color: var(--blue-ink); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .08em; } .ds-article-title { max-width: 24ch; margin: 0; font-size: clamp(1.45rem,2.4vw,2.25rem); font-weight: 600; letter-spacing: -.03em; line-height: 1.08; } .ds-article-title a { color: var(--ink); text-decoration: none; } .ds-article-title a:hover { color: var(--blue-ink); } .ds-article-title a:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; } .ds-article-excerpt { max-width: 70ch; margin: 13px 0 0; color: var(--quiet); font-size: 15px; line-height: 1.6; } .ds-article-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 15px 0 0; color: var(--quiet); font-size: 12px; } .ds-article-meta time { color: var(--ink); font-weight: 600; }"
+    },
+    {
+      "name": "Pagination Cell",
+      "kind": "button",
+      "refersTo": "pagination-cell",
+      "description": "A connected page control for archives longer than five records.",
+      "html": "<button class=\"ds-page\" type=\"button\" aria-current=\"page\">2</button>",
+      "css": ".ds-page { min-width: 44px; min-height: 44px; padding: 0 12px; border: 0; border-right: 1px solid var(--rule); border-radius: 0; background: transparent; color: var(--ink); font: 400 13px/1 var(--font); font-variant-numeric: tabular-nums; cursor: pointer; } .ds-page:hover, .ds-page[aria-current=\"page\"] { color: var(--sheet); background: var(--blue); } .ds-page[aria-current=\"page\"] { font-weight: 700; } .ds-page:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; } .ds-page:active { background: var(--blue-ink); } .ds-page:disabled { color: var(--quiet); background: transparent; cursor: default; opacity: .38; }"
+    },
+    {
+      "name": "Publication Day",
+      "kind": "button",
+      "refersTo": "calendar-day",
+      "description": "A calendar day that marks available writing and supports date filtering.",
+      "html": "<button class=\"ds-day ds-has-entry\" type=\"button\" aria-pressed=\"false\">29</button>",
+      "css": ".ds-day { position: relative; width: 44px; aspect-ratio: 1; padding: 0; border: 0; border-top: 1px solid var(--faint); border-radius: 0; background: transparent; color: var(--ink); font: 400 11px/1 var(--font); font-variant-numeric: tabular-nums; cursor: pointer; } .ds-day:hover { color: var(--blue-ink); background: var(--blue-soft); } .ds-day[aria-pressed=\"true\"] { color: var(--sheet); background: var(--blue); font-weight: 700; } .ds-day:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; } .ds-has-entry::after { position: absolute; right: 50%; bottom: 3px; width: 4px; height: 2px; background: var(--blue); content: \"\"; transform: translateX(50%); } .ds-day[aria-pressed=\"true\"]::after { background: var(--sheet); }"
+    },
+    {
+      "name": "Code Slip",
+      "kind": "custom",
+      "refersTo": "article-code",
+      "description": "An optional literal-code fragment attached to an article record.",
+      "html": "<code class=\"ds-code\" tabindex=\"0\">anchor-name: --archive-note;</code>",
+      "css": ".ds-code { display: block; width: fit-content; max-width: 100%; padding: 5px 8px; overflow: auto; border: 1px solid var(--rule); border-radius: 0; background: var(--sheet); color: var(--blue-ink); font: 400 12px/1.55 ui-monospace, \"SFMono-Regular\", Menlo, monospace; white-space: nowrap; } .ds-code:hover { border-color: var(--blue); } .ds-code:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Open Field Notebook",
+    "overview": "Laststance Archive feels like an open working notebook whose pages have been carefully indexed. The interface is quiet, compact, and practical: the owner should recognize a remembered phrase, subject, or date before any surrounding interface competes for attention.\n\nThe visual system uses graphite ink, mineral blue, ruled paper, and square editorial controls. It deliberately avoids rounded dashboard cards, decorative shadows, and ornamental labels so the committed article titles and metadata remain the primary material.",
+    "keyCharacteristics": [
+      "Search-first retrieval on one open ruled sheet.",
+      "Mineral blue reserved for indexing and interactive states.",
+      "Square controls and hairline rules instead of floating cards.",
+      "One compact sans-serif hierarchy, with monospace reserved for code.",
+      "Date and publication cues remain secondary to article recognition."
+    ],
+    "rules": [
+      {
+        "name": "The Mineral Signal Rule",
+        "body": "Mineral blue marks indexing, navigation, selection, focus, or publication; it does not fill passive decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Paper Before Panels Rule",
+        "body": "Preserve one continuous ruled canvas and separate regions with lines and spacing instead of card backgrounds.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Working Voice Rule",
+        "body": "Use Source Sans 3 for every interface role and reserve monospace for literal code snippets.",
+        "section": "typography"
+      },
+      {
+        "name": "The Attached Surface Rule",
+        "body": "Every control and result belongs to the notebook page; use borders, ruling, and tonal state changes instead of floating elevation.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do lead with search and real article titles when the job is rediscovery.",
+      "Do use mineral blue for index markers and active, linked, focused, selected, or published meaning.",
+      "Do preserve 44px minimum interactive targets and visible two-pixel focus outlines.",
+      "Do keep the subjects rail horizontally scrollable with a visible continuation cue on compact screens.",
+      "Do preserve the light and dark semantic color roles and reduced-motion override."
+    ],
+    "donts": [
+      "Don't turn archive regions or article rows into rounded cards.",
+      "Don't add shadows, decorative gradient fills, ornamental kickers, or decorative badges.",
+      "Don't introduce a second interface typeface; use monospace only for code.",
+      "Don't make the calendar visually stronger than search, subjects, or article titles.",
+      "Don't use icon glyphs where plain text or CSS geometry communicates the control more clearly."
+    ]
+  }
+}
