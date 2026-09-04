@@ -5,3 +5,7 @@ site/data/articles.json
 # Local agent state and instructions
 .gstack/
 AGENTS.md
+.impeccable/config.json
+.impeccable/build/pending.json
+.impeccable/questions/
+.impeccable/review/
