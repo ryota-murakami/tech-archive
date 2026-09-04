@@ -260,7 +260,6 @@ input:focus-visible {
   padding: 0 38px 4px 0;
   border: 0;
   border-bottom: 1px solid var(--rule-strong);
-  outline: 0;
   background: transparent;
   font-size: clamp(1.35rem, 2.3vw, 2rem);
   font-weight: 500;
