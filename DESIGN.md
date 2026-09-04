@@ -180,14 +180,15 @@ Corners stay square with a `0` radius. Controls use underline or hairline geomet
 
 ### Subject Rail
 
-- **Shape:** Full-width line items on larger screens and auto-width 44px tabs on compact screens.
+- **Shape:** Full-width line items on larger screens and auto-width tabs with a 44px minimum target on compact screens.
 - **State:** Hover and pressed states draw a two-pixel mineral-blue underline; pressed text uses Deep Mineral Ink and weight 700.
+- **Focus:** Compact rails reserve five pixels above and below each tab for the external focus outline.
 
 ### Article Index
 
 - **Shape:** Each row uses a narrow folio column and a flexible article column, separated from the next record by one Notebook Rule.
 - **State:** Hover or focus changes the divider to mineral blue and adds a translucent Washed Mineral Blue field.
-- **Target:** Title links keep a 44px minimum height, and uninterrupted technical identifiers wrap within the article column.
+- **Target:** Title links keep a 44px minimum height, and uninterrupted title or source identifiers wrap within the article column.
 - **Content order:** Folio, title, excerpt, metadata, type/source context, tags, then an optional code slip.
 
 ### Date Calendar

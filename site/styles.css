@@ -531,8 +531,10 @@ input:focus-visible {
 }
 
 .article-context {
+  min-width: 0;
   color: var(--blue-ink);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .tag {
@@ -896,7 +898,7 @@ footer {
   .category-list {
     display: flex;
     gap: 18px;
-    padding-right: 28px;
+    padding: 5px 28px 5px 0;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
     scrollbar-width: none;
@@ -912,7 +914,7 @@ footer {
     display: flex;
     flex: 0 0 auto;
     width: auto;
-    min-width: max-content;
+    min-width: 44px;
     min-height: 44px;
     gap: 8px;
   }
