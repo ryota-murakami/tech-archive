@@ -148,7 +148,7 @@ Dark mode preserves the same roles with `#171b18` canvas, `#1e231f` sheet, `#eef
 
 The archive sits inside a `1320px` maximum measure with a fluid `18–64px` page gutter. The first region pairs the page question with a full-width search rule, followed by a result summary and the article workspace.
 
-Above 1080px, the workspace uses a `174px / minmax(0, 1fr) / 236px` grid for subjects, articles, and date tools. At 1080px, it becomes a `160px / minmax(0, 1fr)` grid and moves the calendar below both columns. At 760px, all regions stack; subjects become a horizontally scrollable rail with a fading right edge. At 430px, the masthead, search, summary, metadata gaps, and pagination labels tighten without reducing the 44px control target. At 1440px and wider, the outer gutter settles at 48px.
+Above 1080px, the workspace uses a `174px / minmax(0, 1fr) / 308px` grid for subjects, articles, and date tools. At 1080px, it becomes a `160px / minmax(0, 1fr)` grid and moves the calendar below both columns. At 760px, all regions stack; subjects become a horizontally scrollable rail with a fading right edge. At 430px, the masthead, search, summary, metadata gaps, and pagination labels tighten without reducing the 44px control target. Below 345px, the 308px calendar bleeds into the page gutter so every day remains 44px square without causing viewport overflow. At 1440px and wider, the outer gutter settles at 48px.
 
 Spacing follows a compact working rhythm built from 6px, 12px, 18px, 28px, and 42px intervals. Article rows use 27–29px vertical padding on larger screens and 23–25px on compact screens.
 
@@ -187,11 +187,12 @@ Corners stay square with a `0` radius. Controls use underline or hairline geomet
 
 - **Shape:** Each row uses a narrow folio column and a flexible article column, separated from the next record by one Notebook Rule.
 - **State:** Hover or focus changes the divider to mineral blue and adds a translucent Washed Mineral Blue field.
+- **Target:** Title links keep a 44px minimum height, and uninterrupted technical identifiers wrap within the article column.
 - **Content order:** Folio, title, excerpt, metadata, type/source context, tags, then an optional code slip.
 
 ### Date Calendar
 
-- **Shape:** A compact seven-column register with plain Prev and Next controls.
+- **Shape:** A compact seven-column register with 44px-square days and plain 44px-high Prev and Next controls.
 - **State:** Publication days carry a blue mark; a selected day fills mineral blue and inverts its text and mark.
 
 ### Code Slip

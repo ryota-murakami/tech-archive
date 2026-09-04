@@ -330,7 +330,7 @@ input:focus-visible {
 
 .archive-grid {
   display: grid;
-  grid-template-columns: 174px minmax(0, 1fr) 236px;
+  grid-template-columns: 174px minmax(0, 1fr) 308px;
   gap: clamp(24px, 3vw, 44px);
   padding-top: 8px;
   border-top: 2px solid var(--ink);
@@ -466,10 +466,14 @@ input:focus-visible {
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.08;
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
 .article-title {
+  display: inline-block;
+  max-width: 100%;
+  min-height: 44px;
   color: var(--ink);
   text-decoration: none;
 }
@@ -672,7 +676,7 @@ input:focus-visible {
 
 .calendar-nav button {
   min-width: 44px;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-bottom: 1px solid var(--rule);
@@ -716,6 +720,7 @@ input:focus-visible {
 
 .calendar-grid button {
   position: relative;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-top: 1px solid var(--faint);
@@ -987,6 +992,16 @@ footer {
   .page-button:first-child,
   .page-button:last-child {
     min-width: 76px;
+  }
+}
+
+@media (max-width: 344px) {
+  .calendar-card {
+    position: relative;
+    left: 50%;
+    width: 308px;
+    max-width: none;
+    transform: translateX(-50%);
   }
 }
 
