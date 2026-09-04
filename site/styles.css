@@ -117,6 +117,7 @@ input:focus-visible {
   z-index: 20;
   top: 12px;
   left: 12px;
+  min-height: 44px;
   padding: 10px 14px;
   color: var(--sheet);
   background: var(--blue);

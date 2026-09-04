@@ -587,7 +587,7 @@ function renderArticles(filtered) {
   // Quiet dates and unmatched titles explain how to recover the full index.
   if (visible.length === 0) {
     elements.articleList.innerHTML =
-      '<div class="empty-state"><strong>No matching note.</strong><p>Try another day, subject, or title. Clear all restores the complete archive.</p></div>';
+      '<div class="empty-state"><strong>No matching note.</strong><p>Try another day, subject, or title. Clear filters restores the complete archive.</p></div>';
     return;
   }
 
@@ -694,7 +694,7 @@ function renderCalendar() {
   elements.calendarGrid.innerHTML = markup;
 }
 
-/** Reports whether Clear all has any filter or calendar view to restore; called after archive and month renders. @returns {boolean} Whether reset changes visible state. @example hasActiveArchiveState() */
+/** Reports whether Clear filters has any filter or calendar view to restore; called after archive and month renders. @returns {boolean} Whether reset changes visible state. @example hasActiveArchiveState() */
 function hasActiveArchiveState() {
   return (
     Boolean(state.query) ||
@@ -790,7 +790,7 @@ function renderAll(shouldSyncUrl, focusRequest = null) {
   }
 }
 
-/** Restores the full archive and newest calendar month when Clear all is pressed; called by handleClearClick. @returns {void} @example resetArchive() */
+/** Restores the full archive and newest calendar month when Clear filters is pressed; called by handleClearClick. @returns {void} @example resetArchive() */
 function resetArchive() {
   state.query = "";
   state.category = ALL_CATEGORIES;
