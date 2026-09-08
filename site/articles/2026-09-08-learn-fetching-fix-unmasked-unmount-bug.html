@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="remainingFileCount が fetching を数えて downloading を数えなかった誤りが、Layout unmount で downloading が取り残される別バグを隠していた理由の解説。" />
+  <meta name="archive:title" content="'fetching' を消したら別のバグが出た理由" />
+  <meta name="archive:published" content="2026-09-08" />
+  <meta name="archive:type" content="Explainer" />
+  <meta name="archive:source" content="zumen-fe · #4294" />
+  <meta name="archive:category" content="React" />
+  <meta name="archive:category" content="Next.js" />
+  <meta name="archive:category" content="State" />
+  <meta name="archive:category" content="Frontend" />
+  <meta name="archive:reading-minutes" content="12" />
+  <meta name="archive:quiz-count" content="5" />
+  <meta name="archive:code" content="['idle', 'fetching'] → ['idle', 'downloading']" />
+  <title>'fetching' を消したら別のバグが出た理由</title>
+  <style>
+    :root {
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --bg: #fafaf9;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --accent: #1d4ed8;
+      --ok: #166534; --ok-bg: #dcfce7;
+      --bad: #991b1b; --bad-bg: #fee2e2;
+      --warn: #92400e; --warn-bg: #fef3c7;
+      --idle: #6b7280; --down: #b45309; --done: #166534; --err: #991b1b; --ghost: #9ca3af;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: var(--bg); color: var(--ink); line-height: 1.75;
+    }
+    .wrap { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+    h1 { font-size: 1.7rem; line-height: 1.35; margin: 0 0 0.75rem; }
+    h2 { font-size: 1.3rem; margin: 3rem 0 0.75rem; padding-top: 0.5rem; border-top: 2px solid var(--line); }
+    h3 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    a { color: var(--accent); }
+    code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; background: #f3f4f6; padding: 0.05em 0.3em; border-radius: 3px; }
+    pre { white-space: pre-wrap; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.55; background: #111827; color: #f9fafb; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; margin: 0.6rem 0 1rem; }
+    pre code { background: none; padding: 0; color: inherit; }
+    .lede { font-size: 1.1rem; color: var(--muted); }
+    .cite { font-size: 0.8rem; color: var(--muted); margin: -0.5rem 0 1.1rem; }
+    nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.2rem; margin: 1.5rem 0 2rem; }
+    nav.toc h2 { margin: 0 0 0.5rem; border: none; padding: 0; font-size: 0.95rem; }
+    nav.toc ol { margin: 0; padding-left: 1.2rem; }
+    nav.toc a { text-decoration: none; }
+    .callout { border-left: 4px solid var(--accent); background: #eff6ff; padding: 0.8rem 1rem; margin: 1.2rem 0; border-radius: 0 6px 6px 0; }
+    .callout.bad { border-left-color: var(--bad); background: var(--bad-bg); }
+    .callout.ok { border-left-color: var(--ok); background: var(--ok-bg); }
+    .callout.unverified { border-left-color: #7c3aed; background: #f5f3ff; }
+    .callout .label { display: block; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.2rem; }
+    .skip { font-size: 0.85rem; color: var(--muted); }
+
+    /* diagram family 1: status chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 1rem; }
+    .chip { font-size: 0.8rem; padding: 0.18rem 0.6rem; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; font-family: ui-monospace, Menlo, monospace; }
+    .chip.idle { border-color: var(--idle); color: var(--idle); }
+    .chip.down { border-color: var(--down); color: var(--down); background: #fffbeb; }
+    .chip.done { border-color: var(--done); color: var(--done); }
+    .chip.err  { border-color: var(--err);  color: var(--err); }
+    .chip.ghost{ border-style: dashed; border-color: var(--ghost); color: var(--ghost); }
+    .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; margin: 0.5rem 0 1rem; }
+    .arrow { color: var(--muted); font-size: 0.8rem; }
+
+    /* diagram family 2: two layers */
+    .layers { display: grid; gap: 0.6rem; margin: 1rem 0 1.25rem; }
+    .layer { border: 1px solid var(--line); background: var(--card); padding: 0.8rem 1rem; border-radius: 6px; }
+    .layer .who { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+    .layer.lives { box-shadow: inset 4px 0 0 var(--ok); }
+    .layer.dies  { box-shadow: inset 4px 0 0 var(--bad); }
+
+    /* diagram family 3: timeline */
+    .timeline { margin: 1rem 0 1.25rem; border-left: 2px solid var(--line); padding-left: 1.1rem; }
+    .tl { position: relative; padding: 0.35rem 0 0.8rem; }
+    .tl::before { content: ""; position: absolute; left: -1.44rem; top: 0.75rem; width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--accent); }
+    .tl .when { font-size: 0.75rem; color: var(--accent); font-weight: 600; }
+    .tl .state { font-size: 0.85rem; color: var(--muted); }
+
+    /* comparison */
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 1rem 0 1.25rem; }
+    @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+    .col { border: 1px solid var(--line); background: var(--card); padding: 0.8rem 1rem; border-radius: 6px; }
+    .col h3 { margin-top: 0; }
+    .big { font-size: 1.9rem; font-weight: 700; margin: 0.2rem 0; }
+    .big.zero { color: var(--ok); }
+    .big.one  { color: var(--bad); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin: 0.6rem 0 1.2rem; }
+    th, td { border: 1px solid var(--line); padding: 0.45rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; }
+    td.num { font-family: ui-monospace, Menlo, monospace; text-align: center; }
+    td.hit { background: var(--bad-bg); font-weight: 700; }
+
+    /* quiz */
+    .q { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.1rem; margin: 0 0 1rem; }
+    .q h3 { margin-top: 0; }
+    .opts { display: grid; gap: 0.4rem; }
+    .opts button { text-align: left; font: inherit; padding: 0.55rem 0.7rem; border: 1px solid var(--line); background: #fff; border-radius: 4px; cursor: pointer; }
+    .opts button:hover { border-color: var(--accent); }
+    .opts button[disabled] { cursor: default; }
+    .opts button.correct { background: var(--ok-bg); border-color: var(--ok); }
+    .opts button.wrong { background: var(--bad-bg); border-color: var(--bad); }
+    .feedback { margin-top: 0.6rem; display: none; font-size: 0.95rem; }
+    .feedback.show { display: block; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1><code>'fetching'</code> を消したら別のバグが出た理由</h1>
+    <p class="lede">
+      結論を先に書きます。新しいバグを作ったのではありません。
+      <strong>もう一つ別のバグが最初からあり、間違った数え方がそれを隠していました。</strong>
+      数え方を直したので、隠れていた方が表に出ました。
+    </p>
+  </header>
+
+  <nav class="toc" aria-label="目次">
+    <h2>目次</h2>
+    <ol>
+      <li><a href="#background">背景</a></li>
+      <li><a href="#intuition">要点</a></li>
+      <li><a href="#mechanics">仕組み</a></li>
+      <li><a href="#codebase">このコードベースでは</a></li>
+      <li><a href="#quiz">確認クイズ</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============================================================ -->
+  <section id="background">
+    <h2>背景</h2>
+    <p class="skip"><a href="#narrow">FileDownloadBox の構造を知っている人は「狭い背景」へ。</a></p>
+
+    <h3>深い背景：ダウンロードボックスとは何か</h3>
+    <p>
+      CSV や xlsx のエクスポートは、BE でジョブを回してから署名付き URL を受け取り、ブラウザで保存します。
+      この一連を UI で見せるのが右下のダウンロードボックスです。
+      複数ファイルを順番に処理する<strong>キュー</strong>で、各ファイルは <code>downloadStatus</code> を持ちます。
+    </p>
+    <p>
+      ボックスの × ボタンには<strong>ガード</strong>があります。
+      まだ処理が終わっていないファイルがある間は閉じられません。
+      閉じるとキューが空にされるので、進行中のファイルが黙って消えるのを防ぐためです。
+    </p>
+    <p>
+      ガードの判定材料が <code>remainingFileCount</code>（残り件数）です。
+      これは「まだ終わっていない状態のファイルの数」で、0 のときだけ × が有効になります。
+    </p>
+
+    <h3 id="narrow">狭い背景：二つの層に分かれている</h3>
+    <p>
+      キューの<strong>データ</strong>を持つコンポーネントと、キューを<strong>処理するループ</strong>を持つコンポーネントが別です。
+      この分離が今回の話の前提です。
+    </p>
+    <div class="layers">
+      <div class="layer lives">
+        <div class="who">FileDownloadBoxProvider · <code>src/pages/_app.tsx:220</code></div>
+        <div>
+          <code>fileDownloadRequests</code>（キュー本体）と <code>remainingFileCount</code> を持つ。
+          <code>_app.tsx</code> 直下なので、<strong>ページ遷移しても消えない</strong>。
+        </div>
+      </div>
+      <div class="layer dies">
+        <div class="who">FileDownloadBox · <code>src/components/layouts/layout/Layout.tsx:88</code></div>
+        <div>
+          1 秒ごとに次の <code>idle</code> を探して処理する待ち受けループを持つ。
+          <code>Layout</code> の中にあるので、<strong>Layout が外れると一緒に unmount される</strong>。
+        </div>
+      </div>
+    </div>
+    <p>
+      Next.js Pages Router では、各ページが <code>getLayout</code> を持ち、<code>_app.tsx</code> が
+      <code>Component.getLayout ?? ((page) =&gt; page)</code> で適用します。
+      同じ Layout を返すページ同士の遷移では React が Layout を再利用します。
+      一方、<code>getLayout</code> を持たないページに遷移すると Layout そのものが外れます。
+    </p>
+    <p class="cite">
+      出典: <a href="https://nextjs.org/docs/pages/building-your-application/routing/pages-and-layouts">Next.js · Pages and Layouts · Per-Page Layouts</a>
+      ／ <code>src/pages/_app.tsx:162</code>
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="intuition">
+    <h2>要点</h2>
+    <p>
+      バグは二つあります。別々のものです。
+    </p>
+    <table>
+      <thead>
+        <tr><th></th><th>バグ A（数え方）</th><th>バグ B（unmount で取り残し）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>何が起きる</th>
+          <td><code>remainingFileCount</code> が <code>'fetching'</code> を数え、<code>'downloading'</code> を数えない</td>
+          <td>Layout が外れてループが止まると、<code>'downloading'</code> のファイルが誰にも終了させられず残る</td>
+        </tr>
+        <tr>
+          <th>いつからある</th>
+          <td>#1595 以降</td>
+          <td>Provider と Box が別層になった時点から</td>
+        </tr>
+        <tr>
+          <th>直したコミット</th>
+          <td><code>90e940f42</code>（9/5）</td>
+          <td><code>f9ce29f45</code>（9/8、案1）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      具体的なデータで見ます。キューに 1 件、状態は <code>downloading</code>。
+      ループはすでに止まっていて、この 1 件を <code>completed</code> にも <code>error</code> にもする者はいません。
+      この状態はバグ B が作ります。
+    </p>
+    <pre><code>fileDownloadRequests = [
+  { fileType: 'clients_bulk_update', downloadStatus: 'downloading', fileName: '...' }
+]</code></pre>
+
+    <div class="compare">
+      <div class="col">
+        <h3>バグ A あり（修正前）</h3>
+        <p>数える対象: <code>['idle', 'fetching']</code></p>
+        <p class="big zero">remainingFileCount = 0</p>
+        <p><code>downloading</code> は数えない。× が有効。ユーザーは閉じられる。<br />
+        <strong>バグ B は起きているが、症状が出ない。</strong></p>
+      </div>
+      <div class="col">
+        <h3>バグ A 修正後</h3>
+        <p>数える対象: <code>['idle', 'downloading']</code></p>
+        <p class="big one">remainingFileCount = 1</p>
+        <p><code>downloading</code> を数える。× が無効。誰も終わらせないので、リロードまで閉じられない。<br />
+        <strong>バグ B の症状が出る。</strong></p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">要点</span>
+      バグ A の「実行中を数えない」という誤りが、バグ B の「実行中が取り残される」という誤りを打ち消していました。
+      A だけ直すと、B の取り残しが正しく「残り 1」と数えられ、ガードが働き続けます。
+      A の修正は正しい。B も直す必要があった。それだけです。
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="mechanics">
+    <h2>仕組み</h2>
+
+    <h3>1. 状態は 4 つだけ</h3>
+    <pre><code>export type DownloadStatus = 'idle' | 'downloading' | 'completed' | 'error';</code></pre>
+    <p class="cite">出典: <code>src/components/layouts/file_download_box/FileDownloadBoxProvider.tsx:16</code></p>
+    <div class="chips">
+      <span class="chip idle">idle</span>
+      <span class="chip down">downloading</span>
+      <span class="chip done">completed</span>
+      <span class="chip err">error</span>
+      <span class="chip ghost">fetching — 型に無い。代入箇所も無い</span>
+    </div>
+    <p>
+      遷移は次の通りです。<code>idle</code> だけがループの入口で、<code>completed</code> と <code>error</code> が出口です。
+    </p>
+    <div class="flow">
+      <span class="chip idle">idle</span><span class="arrow">ループが拾う</span>
+      <span class="chip down">downloading</span><span class="arrow">保存成功</span>
+      <span class="chip done">completed</span>
+    </div>
+    <div class="flow">
+      <span class="chip down">downloading</span><span class="arrow">API 失敗 / ポーリング上限 / <strong>unmount（案1で追加）</strong></span>
+      <span class="chip err">error</span>
+    </div>
+
+    <h3>2. 残り件数の定義と、修正前後の値（計測）</h3>
+    <p>現行コード:</p>
+    <pre><code>const remainingFileCount = useMemo(
+  () =&gt;
+    fileDownloadRequests.filter((file) =&gt;
+      ['idle', 'downloading'].some((status) =&gt; status === file.downloadStatus)
+    ).length,
+  [fileDownloadRequests]
+);</code></pre>
+    <p class="cite">出典: <code>FileDownloadBoxProvider.tsx:148-154</code></p>
+    <p>
+      修正コミット <code>90e940f42</code> の差分は 1 行です。
+    </p>
+    <pre><code>-        ['idle', 'fetching'].some((status) =&gt; status === file.downloadStatus)
++        ['idle', 'downloading'].some((status) =&gt; status === file.downloadStatus)</code></pre>
+    <p class="cite">出典: <code>git show 90e940f42 -- FileDownloadBoxProvider.tsx</code></p>
+    <p>
+      同じ <code>filter</code> を Node で実行した結果です。推測ではなく、この説明を書く前に実際に走らせました。
+    </p>
+    <table>
+      <thead>
+        <tr><th>キューの中身</th><th>旧: <code>idle + fetching</code></th><th>新: <code>idle + downloading</code></th></tr>
+      </thead>
+      <tbody>
+        <tr><td>idle ×1</td><td class="num">1</td><td class="num">1</td></tr>
+        <tr><td>downloading ×1</td><td class="num hit">0</td><td class="num hit">1</td></tr>
+        <tr><td>completed ×1</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>error ×1</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>idle ×1 + downloading ×1</td><td class="num">1</td><td class="num">2</td></tr>
+      </tbody>
+    </table>
+    <p>
+      赤い行が全てです。<code>downloading</code> 1 件が、旧では 0、新では 1。
+      そして <code>error</code> はどちらでも 0 です。案1 が <code>error</code> を選んだ理由はこの最後の点です。
+    </p>
+
+    <h3>3. ループは <code>idle</code> しか拾わない</h3>
+    <pre><code>const fileIndex = fileDownloadRequestRef.current.findIndex(
+  (file) =&gt; file.downloadStatus === 'idle'
+);</code></pre>
+    <p class="cite">出典: <code>FileDownloadBox.tsx:221-223</code></p>
+    <p>
+      すでに <code>downloading</code> になった行は、この <code>findIndex</code> に二度と引っかかりません。
+      その行を <code>completed</code> / <code>error</code> へ進めるのは、それを <code>downloading</code> にした<strong>同じループの同じ周回</strong>だけです。
+      ループが途中で止まれば、その行は永久に <code>downloading</code> です。
+    </p>
+
+    <h3>4. Layout が外れるとループが止まる</h3>
+    <p>
+      案1 より前の cleanup は次の 1 行でした。
+    </p>
+    <pre><code>return () =&gt; {
+  unmountRef.current = true;
+};</code></pre>
+    <p>
+      React はコンポーネントが DOM から外れるとき、effect の cleanup を最後に一度呼びます。
+      ループは <code>if (unmountRef.current) break;</code> で次の周回に抜けますが、進行中の行の状態は触りません。
+    </p>
+    <p class="cite">
+      出典: <a href="https://react.dev/reference/react/useEffect">React · useEffect</a>
+      —「After your component is removed from the DOM, React will run your cleanup function.」
+      ／ <code>FileDownloadBox.tsx:218</code>
+    </p>
+
+    <h3>5. どの操作で Layout が外れるか</h3>
+    <p>
+      案件詳細の「戻る」は <code>router.push('/orders')</code> です。
+      <code>src/pages/orders/index.tsx</code> は <code>getLayout</code> を持たず、
+      マウント直後に <code>/orders/table</code> か <code>/orders/kanban</code> へ <code>router.push</code> するだけのページです。
+      つまり一瞬だけ Layout 無しの状態を通ります。
+    </p>
+    <p class="cite">
+      出典: <code>src/views/orders/detail/components/OrderDetailPageHeader.tsx:52</code>
+      ／ <code>src/pages/orders/index.tsx:30-42</code>（<code>getLayout</code> の定義なし、grep で 0 件）
+    </p>
+
+    <div class="timeline">
+      <div class="tl">
+        <div class="when">1. ダウンロード開始</div>
+        ループが <code>idle → downloading</code> にする。
+        <div class="state">残り 1。× は無効。（旧コードでは残り 0、× が有効）</div>
+      </div>
+      <div class="tl">
+        <div class="when">2. 案件詳細を開く</div>
+        同じ Layout チェーンなので Box はそのまま。ループも生きている。
+      </div>
+      <div class="tl">
+        <div class="when">3. 「戻る」→ <code>/orders</code></div>
+        <code>getLayout</code> 無し → Layout が外れる → Box が unmount → ループが break。
+        <div class="state">キューの行は <code>downloading</code> のまま。Provider は <code>_app</code> にいるので消えない。</div>
+      </div>
+      <div class="tl">
+        <div class="when">4. <code>/orders</code> → <code>/orders/table</code> にリダイレクト</div>
+        Layout が再びマウント。新しい Box、新しいループ。
+      </div>
+      <div class="tl">
+        <div class="when">5. 新しいループは <code>idle</code> だけ探す</div>
+        取り残された <code>downloading</code> は無視される。
+        <div class="state">
+          新コード: 残り 1 → <code>handleCloseClick</code> が early return、× は <code>pointerEvents: 'none'</code>。リロードまで閉じられない。<br />
+          旧コード: 残り 0 → × が押せる。閉じればキューが空になり、症状は見えない。
+        </div>
+      </div>
+    </div>
+    <p class="cite">
+      出典: <a href="https://github.com/factbase-dev/zumen-fe/pull/4294#discussion_r3958332463">PR #4294 · o-bata の再現手順</a>
+      ／ ガード: <code>FileDownloadBox.tsx:435</code>, <code>:493</code>
+    </p>
+
+    <div class="callout unverified">
+      <span class="label">未検証</span>
+      この説明を書いたセッションでは、ブラウザで「ダウンロード中 → 案件詳細 → 戻る」を再実行していません。
+      遷移経路と各行の挙動はコードから確認しました。× が押せなくなる症状そのものはレビューコメントの報告に依っています。
+    </div>
+
+    <h3>6. 案1 が何をするか</h3>
+    <pre><code>return () =&gt; {
+  unmountRef.current = true;
+
+  // 待ち受けループが止まるので、downloading のまま残すと閉じられなくなる
+  setFileDownloadRequests((previous) =&gt; {
+    const next = [...previous];
+    for (const fileDownloadRequest of next) {
+      if (fileDownloadRequest.downloadStatus === 'downloading') {
+        fileDownloadRequest.downloadStatus = 'error';
+      }
+    }
+    return next;
+  });
+};</code></pre>
+    <p class="cite">出典: <code>FileDownloadBox.tsx:417-430</code>（<code>f9ce29f45</code>）</p>
+    <p>
+      unmount の瞬間に、進行中の行を <code>error</code> に倒します。
+      <code>setFileDownloadRequests</code> は Provider の state を更新する関数で、Provider は生きているので届きます。
+      <code>error</code> は残り件数に入らない（上の表）ので、再マウント後の × は有効になります。
+    </p>
+
+    <div class="callout bad">
+      <span class="label">誤解しやすい点</span>
+      「<code>'fetching'</code> を消したから壊れた」ではありません。
+      <code>'fetching'</code> 行は、実行中を数え漏らすバグでした。
+      その数え漏らしが、取り残しバグを結果的に隠していただけです。
+      戻せば取り残しは再び見えなくなりますが、進行中に閉じられる元のバグも戻ります。
+    </div>
+
+    <div class="callout ok">
+      <span class="label">一般化すると</span>
+      「まだ終わっていない」と数える状態には、<strong>ワーカーが止まるすべての経路</strong>で出口（<code>completed</code> / <code>error</code>）へ運ぶ処理が必要です。
+      API 失敗とポーリング上限には出口がありましたが、unmount にはありませんでした。
+      数え方だけ正しくして出口を足さないと、ガードが固まります。
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="codebase">
+    <h2>このコードベースでは</h2>
+    <ul>
+      <li>
+        <code>DownloadStatus</code> は 4 値（<code>FileDownloadBoxProvider.tsx:16</code>）。
+        <code>'fetching'</code> を再導入しない。Serena メモ <code>pattern_download_status_no_fetching</code> にも記録あり。
+      </li>
+      <li>
+        残り件数は <code>idle</code> と <code>downloading</code>（同 <code>:148-154</code>）。コメント「ダウンロード待ちか、ダウンロード中」と一致している。
+      </li>
+      <li>
+        × ガードは 2 箇所。ハンドラの early return（<code>FileDownloadBox.tsx:435</code>）と、アイコンの <code>pointerEvents: 'none'</code>（同 <code>:493</code>）。
+      </li>
+      <li>
+        ループの入口は <code>idle</code> のみ（同 <code>:221-223</code>）。unmount 時の出口は案1 の cleanup（同 <code>:417-430</code>）。
+      </li>
+      <li>
+        Provider は <code>_app.tsx:220</code>、Box は <code>Layout.tsx:88-90</code>。層が違うので、Box が unmount しても Provider の state は残る。この前提を崩す変更（Box を <code>_app</code> へ移す案2）は取り消し済み。理由は Serena メモ <code>pattern_file_download_box_host_outside_layout</code>。
+      </li>
+      <li>
+        <code>getLayout</code> を持たないページは <code>src/pages/orders/index.tsx</code>（リダイレクト専用）。ここを通る動線が、Layout を一度外す。
+      </li>
+    </ul>
+    <div class="callout unverified">
+      <span class="label">未検証</span>
+      <code>90e940f42</code> で追加された <code>FileDownloadBoxProvider.spec.tsx</code> は現在の作業ツリーに存在しません。
+      どのコミットで消えたかは追っていません。<code>git log --diff-filter=D -- '**/FileDownloadBoxProvider.spec.tsx'</code> で確認できます。
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="quiz">
+    <h2>確認クイズ</h2>
+    <p>「仕組み」で確認した事実だけを問います。</p>
+
+    <div class="q" data-q="1">
+      <h3>1. <code>DownloadStatus</code> の値として正しい組はどれか</h3>
+      <div class="opts">
+        <button data-ok="0">idle / fetching / completed / error</button>
+        <button data-ok="1">idle / downloading / completed / error</button>
+        <button data-ok="0">idle / fetching / downloading / completed / error</button>
+        <button data-ok="0">pending / downloading / done / failed</button>
+      </div>
+      <div class="feedback"></div>
+    </div>
+
+    <div class="q" data-q="2">
+      <h3>2. 修正前の <code>remainingFileCount</code> は、<code>downloading</code> 1 件だけのキューを何と数えるか</h3>
+      <div class="opts">
+        <button data-ok="1">0</button>
+        <button data-ok="0">1</button>
+        <button data-ok="0">2</button>
+        <button data-ok="0">型エラーになる</button>
+      </div>
+      <div class="feedback"></div>
+    </div>
+
+    <div class="q" data-q="3">
+      <h3>3. Layout が外れて Box が unmount したとき、案1 より前のコードでは進行中のファイルの状態はどうなるか</h3>
+      <div class="opts">
+        <button data-ok="0">completed になる</button>
+        <button data-ok="0">error になる</button>
+        <button data-ok="1">downloading のまま残る</button>
+        <button data-ok="0">Provider ごと消えるので存在しなくなる</button>
+      </div>
+      <div class="feedback"></div>
+    </div>
+
+    <div class="q" data-q="4">
+      <h3>4. 再マウントした新しい待ち受けループが、取り残された <code>downloading</code> を処理しないのはなぜか</h3>
+      <div class="opts">
+        <button data-ok="0">unmountRef が true のままだから</button>
+        <button data-ok="1">findIndex が downloadStatus === 'idle' の行しか探さないから</button>
+        <button data-ok="0">新しいループは Provider の state を読めないから</button>
+        <button data-ok="0">jobStatusId が失われるから</button>
+      </div>
+      <div class="feedback"></div>
+    </div>
+
+    <div class="q" data-q="5">
+      <h3>5. 案1 が unmount 時に <code>downloading</code> を <code>error</code> にする直接の理由はどれか</h3>
+      <div class="opts">
+        <button data-ok="0">New Relic に確実に送るため</button>
+        <button data-ok="1">error は remainingFileCount に数えられないので、× ガードが解除されるため</button>
+        <button data-ok="0">idle に戻すと二重ダウンロードになるため</button>
+        <button data-ok="0">Layout の再マウントを防ぐため</button>
+      </div>
+      <div class="feedback"></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  const fb = {
+    1: { ok: "4 値です。fetching は型にも代入箇所にもありません。",
+         ng: "idle / downloading / completed / error の 4 値です。fetching は存在しません。" },
+    2: { ok: "旧フィルタは idle と fetching だけを数えるので、downloading は 0 です。計測表の赤い行です。",
+         ng: "旧フィルタ ['idle','fetching'] に downloading は含まれないので 0 です。" },
+    3: { ok: "cleanup は unmountRef を立てるだけでした。状態を変える処理は無く、Provider は _app にいるので行は残ります。",
+         ng: "Provider は _app.tsx にあるので消えません。cleanup は状態を触らないので downloading のまま残ります。" },
+    4: { ok: "FileDownloadBox.tsx:221-223 の findIndex は idle だけが対象です。",
+         ng: "入口は downloadStatus === 'idle' の findIndex だけです。downloading は対象外です。" },
+    5: { ok: "計測表のとおり error は新旧どちらのフィルタでも 0 に数えられます。残り 0 になれば × が有効になります。",
+         ng: "目的は remainingFileCount を 0 に戻して × ガードを解除することです。error はそのために残り件数へ入らない状態として選ばれています。" }
+  };
+  document.querySelectorAll(".q").forEach((block) => {
+    const id = block.dataset.q;
+    const buttons = [...block.querySelectorAll("button")];
+    const out = block.querySelector(".feedback");
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const ok = btn.dataset.ok === "1";
+        buttons.forEach((b) => { b.disabled = true; if (b.dataset.ok === "1") b.classList.add("correct"); });
+        if (!ok) btn.classList.add("wrong");
+        out.textContent = (ok ? "正解。" : "不正解。") + (ok ? fb[id].ok : fb[id].ng);
+        out.classList.add("show");
+      });
+    });
+  });
+</script>
+</body>
+</html>
