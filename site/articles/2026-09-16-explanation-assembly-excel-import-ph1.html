@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="エクセル (BOM) をアップロードして組図ツリーの親子関係と表示順を一括で組み替える PR #4325。照合ジョブのポーリング、GCS 経由の結果受け渡し、React Flow の確認モーダル、Jest/MSW 基盤までを読み解く。" />
+<meta name="archive:title" content="エクセルで組図を組み替える — 照合ジョブと確認モーダル" />
+<meta name="archive:published" content="2026-09-16" />
+<meta name="archive:type" content="Explain Diff" />
+<meta name="archive:source" content="zumen-fe · #4325" />
+<meta name="archive:category" content="React" />
+<meta name="archive:category" content="TanStack Query" />
+<meta name="archive:category" content="Testing" />
+<meta name="archive:category" content="Frontend" />
+<meta name="archive:reading-minutes" content="20" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="deriveAssemblyExcelImportPhase → matching | matched | failed" />
+<title>PR #4325 解説 — 組図：エクセルインポート Ph1</title>
+<style>
+  :root {
+    --ink: #1f2933;
+    --muted: #616e7c;
+    --line: #d9e2ec;
+    --paper: #ffffff;
+    --bg: #f7f9fb;
+    --accent: #1976d2;
+    --accent-soft: #e9f4ff;
+    --red: #e53e3e;
+    --red-soft: #fff5f5;
+    --orange: #dd6b20;
+    --orange-soft: #fffaf0;
+    --green: #2f855a;
+    --green-soft: #f0fff4;
+    --gray-soft: #f3f3f3;
+    --code-bg: #f1f5f9;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.75;
+    font-size: 16px;
+  }
+  header.hero {
+    background: linear-gradient(135deg, #0f3d6e 0%, #1976d2 100%);
+    color: #fff;
+    padding: 48px 20px 40px;
+  }
+  header.hero .inner { max-width: 960px; margin: 0 auto; }
+  header.hero h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.3; }
+  header.hero p { margin: 4px 0; opacity: .92; }
+  header.hero a { color: #dbeafe; }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 14px; font-size: 14px; }
+  .meta span { background: rgba(255,255,255,.14); padding: 3px 10px; border-radius: 999px; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 20px 80px; }
+  nav.toc {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 22px; margin: 0 0 32px;
+  }
+  nav.toc h2 { margin: 0 0 10px; font-size: 16px; color: var(--muted); letter-spacing: .04em; }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+  nav.toc li { break-inside: avoid; margin: 2px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 28px 30px; margin-bottom: 28px; }
+  section > h2 { margin: 0 0 6px; font-size: 24px; border-bottom: 2px solid var(--accent-soft); padding-bottom: 8px; }
+  section > h2 small { display: block; font-size: 13px; color: var(--muted); font-weight: normal; margin-top: 2px; }
+  h3 { margin: 30px 0 10px; font-size: 19px; }
+  h4 { margin: 22px 0 8px; font-size: 16px; color: #334e68; }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre {
+    font-family: var(--mono); font-size: 13px; line-height: 1.55;
+    background: #0f172a; color: #e2e8f0; padding: 16px 18px; border-radius: 8px;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 12px 0;
+  }
+  pre .c { color: #94a3b8; }
+  pre .k { color: #7dd3fc; }
+  pre .s { color: #fbbf24; }
+  pre .n { color: #86efac; }
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .callout.warn { border-color: var(--orange); background: var(--orange-soft); }
+  .callout.danger { border-color: var(--red); background: var(--red-soft); }
+  .callout.ok { border-color: var(--green); background: var(--green-soft); }
+  .callout .label { font-weight: bold; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+  .skip { font-size: 14px; color: var(--muted); background: var(--gray-soft); padding: 8px 12px; border-radius: 6px; display: inline-block; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f0f4f8; }
+  td.num { text-align: right; font-family: var(--mono); }
+  .figure { margin: 18px 0; padding: 16px; border: 1px dashed var(--line); border-radius: 10px; background: #fbfdff; overflow-x: auto; }
+  .figure .caption { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+  /* ---- flow diagram ---- */
+  .flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+  .flow .box { flex: 1 1 150px; min-width: 140px; border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 13.5px; }
+  .flow .box b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .flow .box .data { font-family: var(--mono); font-size: 12px; color: #334e68; background: var(--code-bg); border-radius: 4px; padding: 4px 6px; margin-top: 6px; white-space: pre-wrap; }
+  .flow .box.fe { border-color: #1976d2; }
+  .flow .box.be { border-color: #2f855a; }
+  .flow .box.gcs { border-color: #dd6b20; }
+  .flow .arrow { align-self: center; color: var(--muted); font-size: 22px; flex: 0 0 auto; }
+  .lane-label { font-size: 12px; font-weight: bold; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; margin-top: 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid; }
+  .legend .fe::before { border-color: #1976d2; }
+  .legend .be::before { border-color: #2f855a; }
+  .legend .gcs::before { border-color: #dd6b20; }
+
+  /* ---- UI sketch ---- */
+  .ui-modal { border: 2px solid #9fb3c8; border-radius: 10px; background: #fff; max-width: 640px; margin: 0 auto; box-shadow: 0 8px 24px rgba(15,23,42,.12); font-size: 13.5px; }
+  .ui-modal .ui-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: bold; }
+  .ui-modal .ui-body { padding: 14px; }
+  .ui-modal .ui-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .ui-btn { display: inline-block; padding: 5px 12px; border-radius: 6px; border: 1px solid #9fb3c8; background: #fff; font-size: 13px; }
+  .ui-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ui-btn.disabled { opacity: .45; }
+  .ui-btn.ghost { border-color: transparent; color: var(--muted); }
+  .ui-cols { display: flex; gap: 14px; }
+  .ui-cols > div { flex: 1; }
+  .ui-drop { border: 1px dashed #9fb3c8; background: #f7f9fb; border-radius: 8px; padding: 22px 10px; text-align: center; color: var(--muted); }
+  .ui-divider { width: 1px; background: var(--line); }
+  .ui-msg { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  .ui-msg .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+  .ui-msg .dot.red { background: var(--red); }
+  .ui-msg .dot.orange { background: var(--orange); }
+  .ui-msg b.count { font-size: 17px; }
+  .ui-link { color: var(--accent); text-decoration: underline; }
+
+  /* ---- 2-pane node card ---- */
+  .node-card { display: inline-flex; border: 1.5px solid #cbd2d9; border-radius: 6px; background: #fff; font-size: 12px; min-height: 96px; vertical-align: top; }
+  .node-card .pane { width: 130px; padding: 8px; }
+  .node-card .pane + .pane { border-left: 1px solid #cbd2d9; }
+  .node-card .chip { display: inline-block; border: 1px solid #cbd2d9; border-radius: 4px; padding: 0 5px; font-size: 10px; color: var(--muted); line-height: 1.6; margin-bottom: 6px; }
+  .node-card .val { line-height: 1.5; word-break: break-all; }
+  .node-card .thumb { width: 56px; height: 40px; background: linear-gradient(135deg, #dbeafe, #93c5fd); border: 1px solid #93c5fd; border-radius: 3px; margin: 4px auto 0; }
+  .node-card .center { text-align: center; }
+  .node-card.unresolved { border-color: var(--red); }
+  .node-card.unresolved .alert { color: var(--red); font-weight: bold; }
+  .node-card.excluded { background: #f5f7fa; color: #9fb3c8; }
+  .node-card .mini { display: inline-block; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; padding: 1px 6px; font-size: 11px; margin-top: 6px; }
+  .node-card .mini.ghost { border-color: transparent; color: var(--muted); }
+  .node-wrap { display: inline-block; text-align: right; }
+  .node-wrap .revert { font-size: 11px; color: #52606d; margin-top: 3px; }
+
+  /* ---- CSS tree ---- */
+  .tree { display: flex; align-items: flex-start; gap: 0; }
+  .tree .col { display: flex; flex-direction: column; gap: 18px; }
+  .tree .connector { width: 40px; align-self: stretch; position: relative; }
+  .tree .connector::before { content: ""; position: absolute; left: 0; right: 0; top: 48px; border-top: 2px solid #9fb3c8; }
+  .tree .connector.multi::after { content: ""; position: absolute; left: 50%; top: 48px; bottom: 48px; border-left: 2px solid #9fb3c8; }
+  .tree .col .child { position: relative; }
+  .tree .col .child::before { content: ""; position: absolute; left: -20px; top: 48px; width: 20px; border-top: 2px solid #9fb3c8; }
+
+  /* ---- phase boxes ---- */
+  .phases { display: flex; flex-wrap: wrap; gap: 10px; }
+  .phase { flex: 1 1 140px; border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 13.5px; }
+  .phase b { display: block; font-family: var(--mono); font-size: 13px; margin-bottom: 4px; }
+  .phase.ok { border-color: var(--green); background: var(--green-soft); }
+  .phase.bad { border-color: var(--red); background: var(--red-soft); }
+  .phase.busy { border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ---- timeline ---- */
+  .timeline { position: relative; height: 92px; margin: 26px 8px 8px; border-bottom: 2px solid #9fb3c8; }
+  .timeline .tick { position: absolute; bottom: -6px; width: 10px; height: 10px; border-radius: 50%; background: #9fb3c8; transform: translateX(-50%); }
+  .timeline .tick.good { background: var(--green); }
+  .timeline .tick.bad { background: var(--red); }
+  .timeline .tick.end { background: var(--accent); }
+  .timeline .lbl { position: absolute; bottom: 12px; transform: translateX(-50%); font-size: 12px; text-align: center; white-space: nowrap; }
+  .timeline .lbl small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .timeline .band { position: absolute; top: 0; height: 22px; background: var(--red-soft); border: 1px dashed var(--red); border-radius: 4px; font-size: 11px; color: var(--red); padding: 1px 6px; white-space: nowrap; }
+
+  /* ---- set math ---- */
+  .sets { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .set { border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fff; font-size: 13.5px; }
+  .set b { display: block; font-size: 12px; color: var(--muted); }
+  .set .ids { font-family: var(--mono); }
+  .op { font-size: 20px; color: var(--muted); }
+
+  /* ---- batch diagram ---- */
+  .batch { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .batch .nodes { display: grid; grid-template-columns: repeat(5, 28px); gap: 4px; }
+  .batch .nodes span { width: 28px; height: 22px; border: 1px solid #9fb3c8; border-radius: 3px; font-size: 10px; text-align: center; line-height: 20px; background: #fff; }
+  .batch .nodes span.b2 { border-color: var(--orange); background: var(--orange-soft); }
+
+  /* ---- diff table ---- */
+  .files td:first-child { font-family: var(--mono); font-size: 12.5px; }
+
+  /* ---- quiz ---- */
+  .quiz .q { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 16px 0; background: #fff; }
+  .quiz .q h4 { margin: 0 0 10px; font-size: 16px; color: var(--ink); }
+  .quiz .opts { display: grid; gap: 8px; }
+  .quiz button.opt {
+    text-align: left; font: inherit; font-size: 14.5px; padding: 10px 12px; border-radius: 8px;
+    border: 1.5px solid var(--line); background: #fff; cursor: pointer; line-height: 1.5; color: var(--ink);
+  }
+  .quiz button.opt:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  .quiz button.opt:disabled { cursor: default; }
+  .quiz button.opt.correct { border-color: var(--green); background: var(--green-soft); }
+  .quiz button.opt.wrong { border-color: var(--red); background: var(--red-soft); }
+  .quiz .fb { margin-top: 10px; font-size: 14px; display: none; padding: 10px 12px; border-radius: 8px; }
+  .quiz .fb.show { display: block; }
+  .quiz .fb.ok { background: var(--green-soft); border-left: 4px solid var(--green); }
+  .quiz .fb.ng { background: var(--red-soft); border-left: 4px solid var(--red); }
+  .quiz .score { font-weight: bold; margin-top: 14px; }
+
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 20px; }
+
+  @media (max-width: 720px) {
+    body { font-size: 15px; }
+    section { padding: 20px 16px; }
+    nav.toc ol { columns: 1; }
+    .ui-cols { flex-direction: column; }
+    .ui-divider { display: none; }
+    .tree { flex-direction: column; }
+    .tree .connector { display: none; }
+    .tree .col .child::before { display: none; }
+    .timeline .lbl { font-size: 10px; }
+    .node-card .pane { width: 110px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="inner">
+    <h1>組図：エクセルインポート Ph1<br><span style="font-size:18px;font-weight:normal;">PR #4325 を読み解く</span></h1>
+    <p>エクセル (BOM) をアップロードして、既存の組図ツリーの親子関係と表示順を一括で組み替える機能を追加した PR。非同期ジョブのポーリング、GCS 経由の結果受け渡し、React Flow で描く「階層の確認・編集」モーダル、そしてそれを Jest で検証するための MSW 基盤まで、一式が入っている。</p>
+    <div class="meta">
+      <span>feature/murakami/assembly-excel-import-ph1 → dev</span>
+      <span>99 files · +7,312 / −433</span>
+      <span>23 commits</span>
+      <span><a href="https://github.com/factbase-dev/zumen-fe/pull/4325">GitHub #4325</a></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<nav class="toc">
+  <h2>目次</h2>
+  <ol>
+    <li><a href="#bg">背景 — 既存システムを知る</a>
+      <ol>
+        <li><a href="#bg-deep">初学者向け: 組図・ツリー・ジョブ・署名付き URL</a></li>
+        <li><a href="#bg-near">この変更に直接効く前提</a></li>
+      </ol>
+    </li>
+    <li><a href="#intuition">直感 — 何を、どう組み立てたか</a>
+      <ol>
+        <li><a href="#int-flow">1 本の非同期フローと 5 つの局面</a></li>
+        <li><a href="#int-clock">「時計」を誰が進めるか</a></li>
+        <li><a href="#int-draft">下書きは Map 1 つ、表示は毎回導出</a></li>
+        <li><a href="#int-save">保存は既存の全置換 PATCH に流し込む</a></li>
+        <li><a href="#int-thumb">サムネイルは id で受け取り、FE が束ねて解決</a></li>
+        <li><a href="#int-layout">ツリーの並べ方を純粋関数に切り出す</a></li>
+      </ol>
+    </li>
+    <li><a href="#code">コード — 変更の歩き方</a>
+      <ol>
+        <li><a href="#code-a">A. 入口とアップロード前モーダル</a></li>
+        <li><a href="#code-b">B. API 層・型・定数</a></li>
+        <li><a href="#code-c">C. 照合フロー hook と局面の導出</a></li>
+        <li><a href="#code-d">D. コンテナと共通モーダル部品</a></li>
+        <li><a href="#code-e">E. 「階層の確認・編集」モーダル</a></li>
+        <li><a href="#code-f">F. 組図ツリー共通部品の集約</a></li>
+        <li><a href="#code-g">G. サムネイル取得の変更 (既存ツリーも含む)</a></li>
+        <li><a href="#code-h">H. テスト基盤: Jest に MSW を配線</a></li>
+        <li><a href="#code-i">I. レビューで直した 6 点</a></li>
+      </ol>
+    </li>
+    <li><a href="#quiz">クイズ — 理解度チェック</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<section id="bg">
+  <h2>1. 背景 — 既存システムを知る<small>この PR が触るのは「組図タブ」「job_statuses」「GCS」「React Flow」「Jest」の 5 領域。順に足場を固める</small></h2>
+
+  <h3 id="bg-deep">1.1 初学者向け: 組図・ツリー・ジョブ・署名付き URL</h3>
+  <p class="skip">ズメーンの組図タブと job_statuses 系の非同期処理を知っている人は <a href="#bg-near">1.2</a> へ飛んでよい。</p>
+
+  <h4>組図 (アセンブリ) とは</h4>
+  <p>製造業の図面は「本体」の下に「ユニット」があり、その下に「部品」がある、という入れ子で管理される。ズメーンではこの親子関係を<b>組図 (assembly)</b> と呼び、図面詳細画面の<b>組図タブ</b>で横向きのツリーとして表示する。1 つの図面は複数の親を持てる (共通部品が 2 つのユニットにぶら下がる) ので、厳密には木ではなくグラフだが、1 つの最上位図面から見れば木として描ける。</p>
+  <p>BE はこの構造を <code>drawing_connections</code> テーブル (<code>drawing_id</code>, <code>parent_id</code>, 並び順) で持ち、FE は <code>GET /drawings/{id}/assembly_graph</code> で最上位図面を根にした入れ子の JSON を受け取る。</p>
+
+  <div class="figure">
+    <div class="tree">
+      <div class="col">
+        <div class="node-card"><div class="pane"><span class="chip">図面</span><div class="val"><b>ASSY-100</b><br>本体</div><div class="thumb"></div></div></div>
+      </div>
+      <div class="connector multi"></div>
+      <div class="col">
+        <div class="child"><div class="node-card"><div class="pane"><span class="chip">図面</span><div class="val"><b>PART-200</b><br>ねじ</div><div class="thumb"></div></div></div></div>
+        <div class="child"><div class="node-card"><div class="pane"><span class="chip">図面</span><div class="val"><b>PART-300</b><br>ブラケット</div><div class="thumb"></div></div></div></div>
+      </div>
+    </div>
+    <div class="caption">組図タブの見え方 (簡略化)。左が親、右が子。ノードは図面のサムネイルと基本項目 (図番・品名など) を持つ。</div>
+  </div>
+
+  <h4>組図の編集はどうやっていたか</h4>
+  <p>この PR より前、組図の階層を変える手段は組図タブの「階層編集」モードでのドラッグ &amp; ドロップだけだった。保存は <code>PATCH /drawings/{id}/assembly_graph</code> に <code>{ children: [{ id, children: [...] }] }</code> という<b>入れ子の ID だけ</b>を送る。BE はこれを受けて、その最上位図面の配下を丸ごと置き換える (<b>全置換</b>)。差分ではなく「これが正しい全体だ」を送る API なので、送り忘れた子は消える。この性質があとで大事になる。</p>
+
+  <h4>job_statuses 系の非同期ジョブ</h4>
+  <p>時間のかかる処理 (PDF 分割、CSV エクスポートなど) は、HTTP リクエストの中で終わらせず、BE が<b>ジョブ</b>として Laravel Queue に積む。FE は起票 API から <code>job_status_id</code> を受け取り、<code>GET /job_statuses/{id}</code> を数秒おきに叩いて (<b>ポーリング</b>) <code>status</code> が <code>queued → executing → finished | failed</code> と進むのを見る。成果物 (ファイル) がある場合は <code>GET /job_statuses/{id}/download_signed_urls</code> で取り出し口をもらう。</p>
+
+  <h4>署名付き URL と GCS</h4>
+  <p>ファイル本体は BE のサーバーを通さず、Google Cloud Storage (GCS) と直接やり取りする。BE は「この URL になら 1 時間だけ PUT (または GET) してよい」という<b>署名付き URL</b> を発行し、FE は素の <code>axios</code> でその URL にアクセスする。つまりアップロードは「BE に署名付き URL をもらう → GCS に PUT → BE に <code>file_key</code> を渡す」の 3 手になる。既存の <code>useUploadFilesToGcs</code> がこの 3 手を隠している。</p>
+
+  <div class="callout">
+    <span class="label">key concept</span>
+    署名付き URL への通信は <code>axiosClient</code> の interceptor (失敗トースト・New Relic 送信) を<b>通らない</b>。GCS 直アクセスの失敗は、機能側が自分で New Relic に送る必要がある。この PR のあちこちに <code>captureException</code> があるのはそのため。
+  </div>
+
+  <h4>React Flow</h4>
+  <p>組図タブのツリーは <code>@xyflow/react</code> (React Flow v12) で描いている。ノードは自前の React コンポーネント、エッジ (線) は step 形。位置は React Flow が決めてくれるわけではなく、<b>自分で x, y を計算して <code>position</code> に書く</b>。そのためにノードの実寸 (<code>measured.width/height</code>) を React Flow が測ってくれるのを待ち、揃ったところでレイアウト関数を走らせる、という段取りが既存の <code>useAutoLayout</code> にある。</p>
+
+  <h4>Jest と TanStack Query</h4>
+  <p>このリポジトリの Jest セットアップ (<code>src/tests/common.ts</code>) は <code>@tanstack/react-query</code> をモジュールごとモックしている。普通のコンポーネント spec には都合がよいが、「mutation が成功したら query が動き始め、その結果で別の query が動く」という<b>連鎖</b>を検証するには本物の react-query と、HTTP を返してくれる偽 BE が要る。この PR はそこに MSW (Mock Service Worker) を持ち込んだ。</p>
+
+  <h3 id="bg-near">1.2 この変更に直接効く前提</h3>
+
+  <h4>Backlog が決めた体験</h4>
+  <ol>
+    <li>組図タブの三点リーダーに「エクセルで階層を組み替え」が出る。条件は<b>組図の編集権限がある</b>こと、<b>対象図面が最上位</b>であること。</li>
+    <li>モーダルで「1. 編集用エクセルをダウンロード」「2. 編集したファイルをアップロード」の 2 ステップ。xlsx のみ、5MB まで、1 ファイル。</li>
+    <li>アップロードは BE で<b>照合 (matching)</b> というジョブになる。エクセルの各行を「図番・品名・区分…」で既存組図内の図面と突き合わせ、行ごとに <b>確定済み / 候補が複数 / 候補なし</b> の 3 状態にする。</li>
+    <li>バリデーションエラーがあれば結果ではなく<b>エラーレポート CSV</b> が返り、ユーザーはそれをダウンロードして閉じる。</li>
+    <li>照合が通れば「階層の確認・編集」モーダルが開く。未確定 (候補が複数 / 候補なし) を全部解消しないと保存できない。解消の手段は「候補から選ぶ」「図面を選択」「組図から除外」。</li>
+    <li>保存は既存の全置換 PATCH。ポーリングは<b>最大 180 秒</b>で諦める。</li>
+  </ol>
+
+  <h4>BE 設計書が決めた契約 (FE から見て重要なもの)</h4>
+  <table>
+    <tr><th>決定</th><th>FE への影響</th></tr>
+    <tr><td>エクセルを<b>完全な正</b>とする。子行が書かれていない図面は「子なし」に変わる</td><td>元の組図にあったのにエクセルに無い図面は「組図から外れる図面」として件数と一覧を見せる必要がある</td></tr>
+    <tr><td>確認モーダルの中間状態 (選択・除外) は <b>FE が保持</b>する</td><td>BE に書き戻す先がない。リロードで消える。状態設計は FE の責務</td></tr>
+    <tr><td>照合結果は <b>GCS に置く JSON</b>。<code>job_statuses.output</code> には <code>kind</code> だけ</td><td>FE は <code>output.kind</code> で分岐し、中身は署名付き URL 経由で GCS から読む。件数は JSON から数え直す</td></tr>
+    <tr><td>サムネイルの署名付き URL は JSON に載せず <b><code>drawing_file_id</code> だけ返す</b> (決定 27、2026-09-15)</td><td>FE が <code>GET /drawing_files/urls</code> で URL に解決する。既存の組図タブ API も同じ変更を受けたので、既存ツリーも追従が要る</td></tr>
+    <tr><td>同じ図面 ID が複数回現れるとき、子の構造が一致しなければ保存 API は 422 (<code>DrawingAssemblyGraphInvalidStructureRule</code>)</td><td>FE は事前判定をしない (レビュー中に一度入れて、意図的に外した)。BE のエラーがトーストで出る</td></tr>
+    <tr><td>保存時の衝突検出なし。後勝ち</td><td>FE も検出しない。既存の D&amp;D 編集と同じ</td></tr>
+  </table>
+
+  <h4>結果 JSON の形</h4>
+  <p>以後の説明で何度も出てくるので、ここで実物に近い最小例を置く (MSW fixture と同じ値)。</p>
+<pre><span class="c">// GCS に置かれる照合結果 JSON (AssemblyGraphMatchingResult)</span>
+{
+  <span class="k">"drawing_id"</span>: 53,                       <span class="c">// 保存先 = 最上位図面</span>
+  <span class="k">"columns"</span>: [
+    { <span class="k">"master_id"</span>: <span class="s">"drawing_number"</span>, <span class="k">"name"</span>: <span class="s">"図番"</span> },
+    { <span class="k">"master_id"</span>: <span class="s">"product_name"</span>,   <span class="k">"name"</span>: <span class="s">"品名"</span> }
+  ],
+  <span class="k">"tree"</span>: {
+    <span class="k">"row_number"</span>: 2, <span class="k">"depth"</span>: 1, <span class="k">"state"</span>: <span class="s">"confirmed"</span>,
+    <span class="k">"values"</span>:  { <span class="k">"drawing_number"</span>: <span class="s">"ASSY-100"</span>, <span class="k">"product_name"</span>: <span class="s">"本体"</span> },
+    <span class="k">"drawing"</span>: { <span class="k">"id"</span>: 53, <span class="k">"values"</span>: {…}, <span class="k">"drawing_file_id"</span>: 753 },
+    <span class="k">"children"</span>: [
+      { <span class="k">"row_number"</span>: 3, <span class="k">"depth"</span>: 2, <span class="k">"state"</span>: <span class="s">"multiple_candidates"</span>,
+        <span class="k">"values"</span>: { <span class="k">"drawing_number"</span>: <span class="s">"PART-200"</span>, <span class="k">"product_name"</span>: <span class="s">"ねじ"</span> },
+        <span class="k">"candidates"</span>: [ { <span class="k">"id"</span>: 201, … }, { <span class="k">"id"</span>: 202, … } ],
+        <span class="k">"children"</span>: [] },
+      { <span class="k">"row_number"</span>: 4, <span class="k">"depth"</span>: 2, <span class="k">"state"</span>: <span class="s">"no_candidates"</span>,
+        <span class="k">"values"</span>: { <span class="k">"drawing_number"</span>: <span class="s">"PART-999"</span>, <span class="k">"product_name"</span>: <span class="s">""</span> },
+        <span class="k">"children"</span>: [] }
+    ]
+  },
+  <span class="k">"unmatched_drawings"</span>: [ {<span class="k">"id"</span>:201}, {<span class="k">"id"</span>:202}, {<span class="k">"id"</span>:300}, {<span class="k">"id"</span>:400} ],  <span class="c">// どの行にも紐づかなかった図面</span>
+  <span class="k">"detached_drawings"</span>:  [ {<span class="k">"id"</span>:300}, {<span class="k">"id"</span>:400} ]                         <span class="c">// 保存すると組図から外れる図面 (初期値)</span>
+}</pre>
+  <p>集合として読むと、<code>unmatched_drawings ⊇ 候補 ∪ detached_drawings</code> である。候補 201/202 はまだ「どの行にも確定していない」ので unmatched に入り、行 3 で選ばれる見込みがあるので detached には入らない。この関係を FE が自分で再計算できることが、次の章の鍵になる。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="intuition">
+  <h2>2. 直感 — 何を、どう組み立てたか<small>細部は 3 章に譲り、ここでは 6 つの芯だけを具体例で押さえる</small></h2>
+
+  <h3 id="int-flow">2.1 1 本の非同期フローと 5 つの局面</h3>
+  <p>ユーザーが「アップロードを開始する」を押してから確認モーダルが開くまで、FE は 6 回の通信をする。うち 2 回は GCS 直接。これを 1 本の hook <code>useAssemblyExcelImportFlow</code> に閉じ込め、外には「いま何局面か (<code>phase</code>)」だけを見せる。</p>
+
+  <div class="figure">
+    <div class="lane-label">アップロード → 照合 → 結果取得</div>
+    <div class="flow">
+      <div class="box fe"><b>① FE: 署名付き URL を要求</b>POST /upload_signed_urls<div class="data">→ { url, file_key: "uploads/assembly.xlsx" }</div></div>
+      <div class="arrow">→</div>
+      <div class="box gcs"><b>② GCS: xlsx を PUT</b>素の axios<div class="data">PUT https://storage…/assembly.xlsx</div></div>
+      <div class="arrow">→</div>
+      <div class="box be"><b>③ BE: 照合を起票</b>POST /drawings/53/assembly_graph/xlsx_matching<div class="data">{ file: { file_key, original_name } }
+→ { job_status_id: 456 }</div></div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="flow">
+      <div class="box be"><b>④ BE: 進行を見る (3 秒ごと)</b>GET /job_statuses/456<div class="data">{ status: "executing" }
+{ status: "executing" }
+{ status: "finished", output: { kind: "result" } }</div></div>
+      <div class="arrow">→</div>
+      <div class="box be"><b>⑤ BE: 成果物の取り出し口</b>GET /job_statuses/456/download_signed_urls<div class="data">→ [{ url: "https://storage…/result.json" }]</div></div>
+      <div class="arrow">→</div>
+      <div class="box gcs"><b>⑥ GCS: 結果 JSON を GET</b>素の axios + 形のガード<div class="data">→ AssemblyGraphMatchingResult</div></div>
+    </div>
+    <div class="legend"><span class="fe">FE → BE (axiosClient)</span><span class="be">BE API</span><span class="gcs">GCS 直アクセス</span></div>
+  </div>
+
+  <p>大事なのは、この hook が <b>React の <code>useState</code> をほとんど持たない</b>ことだ。①〜③ は 1 つの <code>useMutation</code> で、成功時の <code>data</code> に <code>{ jobStatusId, pollingStartedAt }</code> を残す。④ は <code>useQuery</code> (<code>useJobStatusQuery</code>)、⑤⑥ はもう 1 つの <code>useQuery</code>。局面は、この 3 つの TanStack Query の状態から<b>毎レンダー導出</b>する純粋関数 <code>deriveAssemblyExcelImportPhase</code> が決める。</p>
+
+  <div class="figure">
+    <div class="phases">
+      <div class="phase"><b>idle</b>まだ何もしていない。アップロード前モーダルを表示</div>
+      <div class="phase busy"><b>uploading</b>mutation が pending。ボタンが loading に</div>
+      <div class="phase busy"><b>matching</b>job_status を待っている。閉じようとすると確認が挟まる</div>
+      <div class="phase ok"><b>matched</b>結果 JSON が手元にある。「階層の確認・編集」を開く</div>
+      <div class="phase bad"><b>validationFailed</b>kind = error_csv。「エラーレポートをダウンロードして閉じる」</div>
+      <div class="phase bad"><b>failed</b>それ以外の失敗全部。「エラーが発生しました。」</div>
+    </div>
+    <div class="caption">6 つの局面と、それぞれに 1:1 で対応するモーダル。コンテナ <code>AssemblyExcelImportEditModals</code> はこの表をそのまま JSX にしたもの。</div>
+  </div>
+
+  <p>「閉じる」はどの局面からでも同じ 1 手、<code>mutation.reset()</code> だ。mutation の data が消えれば <code>jobStatusId</code> が undefined になり、query は <code>enabled: false</code> になり、局面は idle に戻る。状態を消す処理を各モーダルに書かなくてよい。</p>
+
+  <h3 id="int-clock">2.2 「時計」を誰が進めるか</h3>
+  <p>180 秒で諦める、という要件は簡単そうに見えるが、素直に <code>setTimeout</code> を置くと React の再マウント・タブの非アクティブ化・ネットワーク断で壊れる。この PR は<b>ポーリングの応答が返った時刻</b>を時計にした。TanStack Query は成功応答の時刻を <code>dataUpdatedAt</code>、失敗確定の時刻を <code>errorUpdatedAt</code> に持つので、その大きい方を「最後に settle した時刻」とみなす。</p>
+
+<pre><span class="c">// deriveAssemblyExcelImportPhase.ts</span>
+<span class="k">export const</span> getLastSettledAt = (state) =&gt; Math.max(state.dataUpdatedAt, state.errorUpdatedAt);
+
+<span class="k">const</span> checkIsPollingTimedOut = (state, pollingStartedAt) =&gt;
+  getLastSettledAt(state) - pollingStartedAt &gt;= ASSEMBLY_GRAPH_MATCHING_POLLING_TIMEOUT_MS; <span class="c">// 180_000</span></pre>
+
+  <p>ただしこの時計には穴が 2 つあり、どちらもレビューで塞いだ。</p>
+  <ul>
+    <li><b>応答が返らないと時計が止まる。</b>BE がハングすると <code>dataUpdatedAt</code> も <code>errorUpdatedAt</code> も進まない。そこで 1 回の GET に <code>timeout: 10_000</code> を付け、10 秒ごとに必ず「失敗」として settle させる。</li>
+    <li><b>retry 中は <code>errorUpdatedAt</code> が更新されない。</b>TanStack Query は retry を続けている間、query を <code>pending</code> のまま保つ。「ETIMEDOUT なら無限に retry」と書くと時計が永遠に進まない。そこで <code>retry</code> 述語の先頭で <code>Date.now() - pollingStartedAt &gt;= 180_000</code> なら <code>false</code> を返し、そこで初めて query を error に落として局面を <code>failed (polling_timed_out)</code> に進める。</li>
+  </ul>
+
+  <div class="figure">
+    <div class="timeline">
+      <div class="band" style="left:78%; width:22%;">≥ 180s → 期限切れ</div>
+      <div class="tick good" style="left:2%"></div><div class="lbl" style="left:2%">起票<small>t=0</small></div>
+      <div class="tick good" style="left:12%"></div><div class="lbl" style="left:12%">executing<small>t=3s</small></div>
+      <div class="tick good" style="left:22%"></div><div class="lbl" style="left:22%">executing<small>t=6s</small></div>
+      <div class="tick bad" style="left:40%"></div><div class="lbl" style="left:40%">10s timeout<small>t=19s 失敗で settle</small></div>
+      <div class="tick good" style="left:55%"></div><div class="lbl" style="left:55%">executing<small>t=22s 復旧</small></div>
+      <div class="tick end" style="left:70%"></div><div class="lbl" style="left:70%">finished + result<small>t=…</small></div>
+      <div class="tick bad" style="left:88%"></div><div class="lbl" style="left:88%">180s<small>諦める</small></div>
+    </div>
+    <div class="caption">応答が返るたびに時計が進む。10 秒のリクエスト timeout があるので、BE が黙っても 10 秒に 1 回は進む。終端 (finished / failed) の応答は 180 秒ちょうどに届いても捨てない (終端判定を期限判定より先に置く)。</div>
+  </div>
+
+  <p>ポーリングを止めるのも同じ関数群がやる。<code>useQuery</code> の <code>enabled</code> に関数を渡し (<code>enabled: (query) =&gt; checkShouldContinuePolling(query.state, pollingStartedAt)</code>)、終端・error・期限切れのどれかに着いたら <code>false</code> を返す。<code>enabled: false</code> になった query は、タブを切り替えても、ネットワークが復帰しても再取得しないので、一度 failed になった表示が勝手に成功に戻ることがない (sticky)。</p>
+
+  <h3 id="int-draft">2.3 下書きは Map 1 つ、表示は毎回導出</h3>
+  <p>「階層の確認・編集」モーダルでユーザーがすること は 3 種類しかない。行に図面を選ぶ、行を除外する、それを取り消す。この PR はそれを <b><code>Map&lt;row_number, override&gt;</code> 1 つ</b>で表す。</p>
+<pre><span class="c">// hierarchy_confirm_modal/types.ts</span>
+<span class="k">type</span> AssemblyHierarchyRowOverride =
+  | { kind: <span class="s">'selected'</span>; drawingId: Drawing[<span class="s">'id'</span>] }
+  | { kind: <span class="s">'excluded'</span> };
+<span class="k">type</span> AssemblyHierarchyRowOverrides = ReadonlyMap&lt;AssemblyHierarchyRowNumber, AssemblyHierarchyRowOverride&gt;;</pre>
+  <p>照合結果 JSON は immutable のまま置いておき、表示に必要なもの (各ノードの見え方、未確定件数、外れる図面、保存可否) は <code>deriveAssemblyHierarchyDraftView(result, overrides)</code> が<b>毎回まとめて導出</b>する。件数と選択肢と保存ボタンが同じ計算から出るので、画面のどこを見ても矛盾しない。</p>
+
+  <p>具体例で追う。1.2 の JSON (root 53、行 3 は候補 [201, 202]、行 4 は候補なし) から始める。</p>
+
+  <div class="figure">
+    <div class="lane-label">初期状態: overrides = {}</div>
+    <div class="tree">
+      <div class="col">
+        <div class="node-card"><div class="pane"><span class="chip">エクセル</span><div class="val">ASSY-100<br>本体</div></div><div class="pane center"><span class="chip">図面</span><div class="thumb"></div></div></div>
+      </div>
+      <div class="connector multi"></div>
+      <div class="col">
+        <div class="child"><div class="node-card unresolved"><div class="pane"><span class="chip">エクセル</span><div class="val">PART-200<br>ねじ</div></div><div class="pane center"><span class="chip">図面</span><div class="alert">候補が 2 件</div><span class="mini">候補から選ぶ</span></div></div></div>
+        <div class="child"><div class="node-card unresolved"><div class="pane"><span class="chip">エクセル</span><div class="val">PART-999<br></div></div><div class="pane center"><span class="chip">図面</span><div class="alert">図面が見つかりません</div><span class="mini">図面を選択</span><br><span class="mini ghost">組図から除外</span></div></div></div>
+      </div>
+    </div>
+    <div class="sets" style="margin-top:14px">
+      <div class="set"><b>population (元の組図の全図面)</b><span class="ids">{53, 201, 202, 300, 400}</span></div>
+      <div class="op">−</div>
+      <div class="set"><b>placed (保存されるツリー)</b><span class="ids">{53}</span></div>
+      <div class="op">−</div>
+      <div class="set"><b>未解決行の候補</b><span class="ids">{201, 202}</span></div>
+      <div class="op">=</div>
+      <div class="set" style="border-color:var(--orange)"><b>detached (外れる図面)</b><span class="ids">{300, 400} → 2 件</span></div>
+    </div>
+    <div class="caption">未確定 2 件 (行 3, 行 4)、外れる図面 2 件。保存ボタンは disabled。detached の初期値が BE の <code>detached_drawings</code> と一致する。</div>
+  </div>
+
+  <div class="figure">
+    <div class="lane-label">操作 1: 行 3 で 201 を選ぶ → overrides = { 3: selected 201 }</div>
+    <div class="sets">
+      <div class="set"><b>population</b><span class="ids">{53, 201, 202, 300, 400}</span></div>
+      <div class="op">−</div>
+      <div class="set"><b>placed</b><span class="ids">{53, 201}</span></div>
+      <div class="op">−</div>
+      <div class="set"><b>未解決行の候補</b><span class="ids">{} (行 3 は解決した)</span></div>
+      <div class="op">=</div>
+      <div class="set" style="border-color:var(--orange)"><b>detached</b><span class="ids">{202, 300, 400} → 3 件</span></div>
+    </div>
+    <div class="caption">未確定は 1 件に減り、外れる図面は 3 件に<b>増える</b>。選ばれなかった候補 202 は、もうどの行にも置かれる見込みがないから。「候補選択で外れる件数は不変」という最初の想定はここで崩れ、MSW fixture もこの関係に合わせて直された。</div>
+  </div>
+
+  <div class="figure">
+    <div class="lane-label">操作 2: 行 4 を除外 → overrides = { 3: selected 201, 4: excluded }</div>
+    <div class="tree">
+      <div class="col">
+        <div class="node-card"><div class="pane"><span class="chip">エクセル</span><div class="val">ASSY-100<br>本体</div></div><div class="pane center"><span class="chip">図面</span><div class="thumb"></div></div></div>
+      </div>
+      <div class="connector multi"></div>
+      <div class="col">
+        <div class="child"><div class="node-wrap"><div class="node-card"><div class="pane"><span class="chip">エクセル</span><div class="val">PART-200<br>ねじ</div></div><div class="pane center"><span class="chip">図面</span><div class="thumb"></div></div></div><div class="revert">↶ 未確定に戻す</div></div></div>
+        <div class="child"><div class="node-wrap"><div class="node-card excluded"><div class="pane"><span class="chip">エクセル</span><div class="val">PART-999<br></div></div><div class="pane center"><span class="chip">図面</span><div style="margin-top:14px">組図から除外</div></div></div><div class="revert">↶ 未確定に戻す</div></div></div>
+      </div>
+    </div>
+    <div class="caption">未確定 0 件 → <code>canSave = true</code>。除外行は描かれるがグレー。除外行の<b>子孫</b>があれば <code>hiddenRowNumbers</code> に入り、描かない・数えない・保存しない。</div>
+  </div>
+
+  <div class="callout">
+    <span class="label">design note</span>
+    最初の設計では「配置済みの図面は他の行の選択肢から消す」「候補が枯れたら候補なし扱いにする」「同じ図面の配下が食い違う行に赤枠を出す」も入っていたが、組図は<b>同じ図面を複数回使ってよい</b> (共通部品) ので、いずれも取り消された。残ったのは「候補は BE が返した全件を常に見せる」「構造の一致は BE の保存バリデーションに任せる」というシンプルな形。
+  </div>
+
+  <h3 id="int-save">2.4 保存は既存の全置換 PATCH に流し込む</h3>
+  <p>保存ボタンは <code>serializeAssemblyHierarchyDraftForSave(result, overrides)</code> で下書きを PATCH のボディに直列化する。除外行は配下ごと落とし、選択済み行は選んだ id に置き換える。上の例なら次の 1 行になる。</p>
+<pre>{ parentDrawingId: 53, children: [ { id: 201, children: [] } ] }   <span class="c">// 行 4 (除外) は消えている</span></pre>
+  <p>ここで 1.1 の「全置換」が牙を見せる。組図タブには「新規図面を追加と同時に組図に紐づける」というアップロードのバックグラウンド処理があり、アップロードが終わった順に子を組図へ書き込んでいく。確認モーダルを開いている数分の間にその処理が子を足していたら、いま送る全置換ボディはその子を知らないので<b>消してしまう</b>。</p>
+  <p>だから保存は、既存の階層編集モードの保存 (<code>useChangeMode.onClickSave</code>) と<b>同じ 3 段の手順</b>を通す。</p>
+
+  <div class="figure">
+    <div class="flow">
+      <div class="box fe"><b>1. 直列キューに入る</b><code>runExclusiveAssemblyGraphWrite</code>。バックグラウンド紐づけと同時に PATCH しないための順番待ち</div>
+      <div class="arrow">→</div>
+      <div class="box fe"><b>2. 消してはいけない子を補う</b><code>appendUploadedChildrenMissingFromSavedTree</code>。紐づけ済みなのに送るツリーに無い子を末尾に足す。ただし <code>removedChildDrawingIds</code> に入っている図面は「ユーザーが外した」と見て足さない</div>
+      <div class="arrow">→</div>
+      <div class="box be"><b>3. PATCH → 記録 → 再取得</b>PATCH /drawings/53/assembly_graph → <code>reconcileAssemblyUploadGroupsAfterEditSave</code> → <code>invalidateAssemblyDrawingQueries</code> → トースト → 全モーダルを閉じる</div>
+    </div>
+    <div class="caption">2 段目の <code>removedChildDrawingIds</code> には、除外配下で落ちた図面と「組図から外れる図面」の<b>両方</b>を渡す。レビューで見つかったバグ: 外れる図面を渡していなかったため、直前のアップロードで紐づいた図面をエクセルで外しても、自己修復がツリーに戻してしまう可能性があった。</div>
+  </div>
+
+  <h3 id="int-thumb">2.5 サムネイルは id で受け取り、FE が束ねて解決</h3>
+  <p>確定済みノードにはサムネイルを出す。当初 BE は結果 JSON の各図面に署名付き <code>thumbnail_url</code> を埋める予定だったが、GKE 上での署名は 1 件ごとに IAM への HTTPS 往復になり、実データ最大 4,311 図面では 180 秒のジョブ時間を食い尽くす見積りだった。加えて署名付き URL は 1 時間で切れるので、数百図面の確認作業が長引くと画像が壊れる。</p>
+  <p>そこで契約を変えた。BE は <code>drawing_file_id</code> (図面の先頭ファイルの id、整数) だけを返し、FE が既存の <code>GET /drawing_files/urls?drawing_file_ids[]=…</code> で URL に解決する。この API は既に「20 件ずつ」「10 分キャッシュ」で図面一覧のサムネイルに使われている。</p>
+  <p>問題は呼び方だ。各ノードが自分の id を 1 件ずつ要求すると、画面に 30 ノードあれば 30 リクエストになる。逆に画面側で id 配列を組み立てると、React Flow のノード (props を受け取れない) から可視ノードの集合を吸い上げる配線が要る。この PR は <b>per-id の <code>useQuery</code> + モジュール内のバッチローダー</b>という DataLoader 風の作りにした。</p>
+
+  <div class="figure">
+    <div class="batch">
+      <div>
+        <div class="lane-label">同じ描画で mount した 25 ノード</div>
+        <div class="nodes">
+          <span>701</span><span>702</span><span>703</span><span>704</span><span>705</span>
+          <span>706</span><span>707</span><span>708</span><span>709</span><span>710</span>
+          <span>711</span><span>712</span><span>713</span><span>714</span><span>715</span>
+          <span>716</span><span>717</span><span>718</span><span>719</span><span>720</span>
+          <span class="b2">721</span><span class="b2">722</span><span class="b2">723</span><span class="b2">724</span><span class="b2">725</span>
+        </div>
+      </div>
+      <div class="arrow" style="font-size:22px;color:var(--muted)">→ 50ms 待つ →</div>
+      <div class="flow" style="flex-direction:column; gap:8px;">
+        <div class="box be"><b>GET /drawing_files/urls</b><div class="data">drawing_file_ids[]=701…720 (20 件)</div></div>
+        <div class="box be" style="border-color:var(--orange)"><b>GET /drawing_files/urls</b><div class="data">drawing_file_ids[]=721…725 (5 件)</div></div>
+      </div>
+    </div>
+    <div class="caption">各ノードは <code>useBatchedDrawingFileUrlsQuery({ drawingFileId })</code> を呼ぶだけ。queryFn が要求を 50ms 溜め、20 件ずつ 1 リクエストに束ねて、id ごとの Promise を解決する。同じ id を 3 ノードが要求しても TanStack Query の dedup で 1 回。</div>
+  </div>
+
+  <p>もう 1 つ罠がある。React Flow v12 は <code>onlyRenderVisibleElements</code> を付けていても<b>初回は全ノードを原点に描いて計測する</b>。4,000 ノードのツリーなら、レイアウト前に 4,000 件分 (200 リクエスト) のサムネイル要求が飛んでしまう。そこで「レイアウトが確定するまで <code>drawingFileId</code> を渡さない」ゲートを置いた。既存ツリーは <code>node.data.isLayoutSettled</code>、確認モーダルは Draft Context の <code>isInitialLayoutDone</code>、サブモーダルのカードは <code>useOnInView</code> (見えてから) と、3 箇所で同じ考えを使う。</p>
+
+  <h3 id="int-layout">2.6 ツリーの並べ方を純粋関数に切り出す</h3>
+  <p>確認モーダルのツリーは、組図タブと同じ「左から右へ階層、同じ階層は上に詰めて積む」見え方にする。既存のレイアウトは <code>useHorizontalTopStickyLayoutAlgorithm</code> (約 330 行) の中で、React Flow のノード型・図面データ・「図面を選択」プレースホルダの都合と混ざっていた。この PR はそこから<b>位置計算だけ</b>を <code>layoutTreeHorizontalTopSticky</code> という純粋関数に抜き出し、既存側はそれを呼ぶ 60 行のアダプタになった。</p>
+
+<pre><span class="c">// 入力はレイアウトに要る最小限だけ。React Flow の型を知らない</span>
+<span class="k">type</span> TreeLayoutNode = { id: string; hidden?: boolean; measured?: { width?: number; height?: number }; sort: number; isPlacedLast?: boolean };
+
+<span class="k">const</span> positions = layoutTreeHorizontalTopSticky({ nodes, edges, horizontalIntervalPx: 396, verticalMarginPx: 24 });
+positions.get(<span class="s">'matching:3'</span>)  <span class="c">// =&gt; { level: 1, sort: 0, x: 396, y: 0 }</span></pre>
+
+  <p>アルゴリズムは 2 パス。pass 1 で可視ノードだけの木を作り、各部分木が使う階層の集合を持つ。pass 2 で深さ優先に y を決める。先頭の子は親と縦中央を揃え、2 番目以降の子は「自分の部分木が使う全階層の、いま埋まっている y の最大値」に置く。隣接リストを先に作るので O(ノード数 + エッジ数) で、4,001 ノードで 2.8ms (Jest 実測)。</p>
+  <p>切り出した副産物として、スクロールバー・エッジ生成・translateExtent の計算・定数も <code>src/features/shared/assembly_tree/</code> に集まり、<code>views</code> 側と新 feature 側が同じバレルから import する。<code>features → views</code> の依存を作らないための引っ越しでもある。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="code">
+  <h2>3. コード — 変更の歩き方<small>99 ファイルを 9 つの塊に分け、読む順に並べる。ファイル名は <code>src/</code> からの相対</small></h2>
+
+  <table class="files">
+    <tr><th>塊</th><th>主なファイル</th><th>規模</th></tr>
+    <tr><td>A. 入口とアップロード前モーダル</td><td>views/…/AssemblyDrawingTabHeader.tsx, AssemblyDrawingTabInner.tsx, features/assembly_excel_import_edit_modals/import_modal/*</td><td class="num">~600 行</td></tr>
+    <tr><td>B. API 層・型・定数</td><td>apis/drawings/usePostAssemblyGraphXlsxMatching.ts, useGetAssemblyGraphXlsxTemplate.ts, apis/job_statuses/*, types/assemblyGraphMatching.ts, constants/assembly_graph_matching.ts</td><td class="num">~300 行</td></tr>
+    <tr><td>C. 照合フロー hook と局面</td><td>import_modal/hooks/useAssemblyExcelImportFlow.ts, import_modal/functions/deriveAssemblyExcelImportPhase.ts</td><td class="num">~520 行</td></tr>
+    <tr><td>D. コンテナと共通モーダル部品</td><td>AssemblyExcelImportEditModals.tsx, components/modals/AlertModal.tsx, ModalFrame.tsx, styles/theme.ts</td><td class="num">~150 行</td></tr>
+    <tr><td>E. 階層の確認・編集モーダル</td><td>hierarchy_confirm_modal/** (Provider, hooks, functions, tree, drawing_select_modal, detached_drawings_modal)</td><td class="num">~2,100 行</td></tr>
+    <tr><td>F. 組図ツリー共通部品の集約</td><td>features/shared/assembly_tree/**, views/…/useHorizontalTopStickyLayoutAlgorithm.ts (−300 行)</td><td class="num">~450 行</td></tr>
+    <tr><td>G. サムネイル取得</td><td>apis/drawing_files/useBatchedDrawingFileUrlsQuery.ts, types/drawing.ts, views/…/DrawingNode.tsx, makeNodesAndEdgesFromDrawingNodeWithChildrenInDb.ts</td><td class="num">~250 行</td></tr>
+    <tr><td>H. テスト基盤</td><td>tests/mswTestEnvironment.js, mocks/server.ts, mocks/handlers/assemblyGraphMatching.ts, jest.config.js, *.spec.tsx (22 ファイル)</td><td class="num">~2,800 行</td></tr>
+    <tr><td>I. レビューで直した点</td><td>上記の横断 (最終コミット d2de349e5 など)</td><td class="num">~130 行</td></tr>
+  </table>
+
+  <!-- ---------------- A ---------------- -->
+  <h3 id="code-a">A. 入口とアップロード前モーダル</h3>
+  <p><code>AssemblyDrawingTabInner.tsx</code> は <code>canShowExcelImport = canEditAssemblyDrawing &amp;&amp; isMainDrawingInTopLevel</code> を計算し、ヘッダーに渡す。<code>AssemblyDrawingTabHeader.tsx</code> の <code>ts-pattern</code> の <code>match</code> には、これまで「管理者なら三点リーダーに CSV ダウンロード」しかなかったところに、条件を <code>isAdministrator || canShowExcelImport</code> に広げてメニュー項目「エクセルで階層を組み替え」(<code>rearrange-hierarchy-excel-button</code>) が足された。管理者でなくても、組図編集権限があれば三点リーダーが出る。</p>
+  <p>モーダル本体 <code>AssemblyExcelImportEditModals</code> は「新規図面を追加」モーダル群と同じく、ツリーの <code>isTreeReady</code> ゲートの<b>外</b>に常時マウントされる。ツリーが再取得で unmount されても開いたままにするため。</p>
+
+  <div class="figure">
+    <div class="ui-modal">
+      <div class="ui-head"><span>エクセルで階層を組み替え</span><span class="ui-btn ghost">✕ 閉じる</span></div>
+      <div class="ui-body">
+        <p style="margin:0 0 10px">エクセルで組図の階層を組み替えられます。<br>組み替えられるのは、現在の組図内にある図面のみです。</p>
+        <div class="ui-cols">
+          <div><b>1. 編集用エクセルファイルをダウンロードする</b><br><br><span class="ui-btn">ダウンロード</span></div>
+          <div class="ui-divider"></div>
+          <div><b>2. 編集したファイルをアップロードする</b><div class="ui-drop">ドラッグ＆ドロップまたは<br><span class="ui-btn">ファイルを選択</span><br><small>1ファイルのサイズ：最大5MB</small></div><div style="text-align:center;margin-top:8px"><span class="ui-btn primary disabled">アップロードを開始する</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="caption"><code>AssemblyExcelImportModal</code> (900px)。左 <code>AssemblyExcelImportDownloadSection</code>、右 <code>AssemblyExcelImportUploadSection</code>。処理中 (<code>isProcessing</code>) に ✕ を押すと <code>AssemblyExcelImportCloseConfirmModal</code> (「アップロードを続行する / キャンセルして閉じる」) が挟まる。</div>
+  </div>
+
+  <ul>
+    <li><b>ダウンロード</b>: <code>useGetAssemblyGraphXlsxTemplate</code> は <code>GET /drawings/{id}/assembly_graph/xlsx_template</code> を <code>responseType: 'blob'</code> で同期取得する mutation。BE が <code>Content-Disposition</code> を付けなければ <code>zume-n_assembly_tree_drawing_list_for_update_yyyyMMddHHmm.xlsx</code> という仕様のファイル名に落とす。</li>
+    <li><b>アップロード</b>: <code>react-dropzone</code> で 1 件・xlsx・5MB。超過や形式違いは <code>customToast</code> で弾いて選択状態に載せない。Dropzone / FileName / 専用 hook は同じファイルに colocate されている (別ファイルに散らさない、というこのタスクの方針)。選んだ <code>File</code> を <code>onUploadStart(file)</code> で親に渡すだけで、通信は一切知らない。</li>
+    <li><b>閉じる確認</b>の開閉状態はモーダル内の <code>useDisclosure</code>。照合が終わって確認モーダルに置き換わったあと、次に開いたときに古い確認が残らないよう、コンテナは <code>isOpen</code> の間だけこのモーダルをマウントする (ブラウザ検証で見つかった不具合の対策)。</li>
+  </ul>
+
+  <!-- ---------------- B ---------------- -->
+  <h3 id="code-b">B. API 層・型・定数</h3>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>apis/drawings/usePostAssemblyGraphXlsxMatching.ts</code></td><td><code>POST /drawings/{id}/assembly_graph/xlsx_matching</code>。body は <code>{ file: PreuploadedFileInfo }</code>、応答は <code>{ job_status_id }</code></td></tr>
+    <tr><td><code>apis/drawings/useGetAssemblyGraphXlsxTemplate.ts</code></td><td>テンプレート xlsx の同期取得 (blob)</td></tr>
+    <tr><td><code>apis/job_statuses/useJobStatusQuery.ts</code></td><td>既存 hook を拡張: <code>requestTimeoutMs</code> (1 回の GET の timeout)、<code>output?: AssemblyGraphMatchingJobOutput</code>、<code>export_files</code>、<code>job_type</code> に <code>'match_assembly_graph_xlsx'</code>。timeout を指定したときだけ <code>skipErrorToast: true</code></td></tr>
+    <tr><td><code>apis/job_statuses/useDownloadSignedUrlsQuery.ts</code></td><td><code>getFirstDownloadSignedUrl(jobStatusId)</code> を追加。成果物が 1 つのジョブ向けに先頭 URL を返し、無ければ <b>throw</b> して呼び出し側の query / mutation を失敗に落とす</td></tr>
+    <tr><td><code>apis/job_statuses/useAssemblyGraphMatchingResultQuery.ts</code></td><td>署名付き URL → GCS GET → <code>checkIsAssemblyGraphMatchingResult</code> で骨格 (根ノード + 4 配列) を検証。<code>staleTime: Infinity</code>、<code>retry: 1</code> (署名直後に GCS 側で読めないことがある)、一度 error になったら <code>enabled</code> を切って再取得しない</td></tr>
+    <tr><td><code>types/assemblyGraphMatching.ts</code></td><td>結果 JSON の型。<code>AssemblyGraphMatchingNode</code> は <code>state</code> で判別する union (confirmed は <code>drawing</code>、multiple_candidates は <code>candidates</code> を持つ)。<code>AssemblyGraphMatchingJobOutput</code> は <code>{ kind }</code> だけの判別 union</td></tr>
+    <tr><td><code>constants/assembly_graph_matching.ts</code></td><td><code>OUTPUT_KIND</code> (result / error_csv / internal_error)、<code>NODE_STATE</code>、<code>POLLING_TIMEOUT_MS = 180_000</code>、<code>POLL_REQUEST_TIMEOUT_MS = 10_000</code>、<code>POLL_RETRY_COUNT = 2</code>、エラー CSV のファイル名 prefix</td></tr>
+  </table>
+  <div class="callout warn">
+    <span class="label">型の落とし穴</span>
+    <code>AssemblyGraphMatchingJobOutput</code> を一度 <code>{ kind: 'result' | 'error_csv' | 'internal_error' }</code> という<b>単一オブジェクト</b>に縮めたところ、<code>Extract&lt;JobOutput, { kind: 'result' | 'error_csv' }&gt;</code> が <code>never</code> になって typecheck が落ちた。<code>Extract</code> は union の各メンバーに対して働くので、メンバーが 1 つしかないと丸ごと落ちる。<code>| { kind: 'result' } | { kind: 'error_csv' } | …</code> と書けば直る。Codex の構造化レビューが拾った P1。
+  </div>
+
+  <!-- ---------------- C ---------------- -->
+  <h3 id="code-c">C. 照合フロー hook と局面の導出</h3>
+  <p><code>useAssemblyExcelImportFlow({ drawingId })</code> の骨格は 2.1 で見た。コードで確かめたいのは 3 点。</p>
+
+  <h4>C-1. ポーリングの options</h4>
+<pre><span class="c">// useAssemblyExcelImportFlow.ts</span>
+<span class="k">const</span> jobStatusQuery = useJobStatusQuery(
+  { path: { job_status_id: jobStatusId }, requestTimeoutMs: ASSEMBLY_GRAPH_MATCHING_POLL_REQUEST_TIMEOUT_MS },
+  {
+    <span class="c">// 終端 (完了 / 再試行しても失敗 / 期限切れ) に着いたら止め、再接続で巻き戻らないようにする</span>
+    enabled: (query) =&gt; jobStatusId != null &amp;&amp; pollingStartedAt != null
+      &amp;&amp; checkShouldContinuePolling(query.state, pollingStartedAt),
+    refetchInterval: JOB_STATUS_POLLING_INTERVAL_MS,      <span class="c">// 3 秒</span>
+    refetchIntervalInBackground: true,                     <span class="c">// タブが裏でも続ける</span>
+    refetchOnReconnect: false,
+    <span class="c">// ETIMEDOUT は query を error にしない。ただし起票から 180 秒を超えたら settle させ、期限切れ局面へ進める</span>
+    retry: (failureCount, error) =&gt; {
+      <span class="k">if</span> (pollingStartedAt != null &amp;&amp; Date.now() - pollingStartedAt &gt;= ASSEMBLY_GRAPH_MATCHING_POLLING_TIMEOUT_MS) <span class="k">return</span> <span class="n">false</span>;
+      <span class="k">return</span> (isAxiosError(error) &amp;&amp; error.code === <span class="s">'ETIMEDOUT'</span>) || failureCount &lt; ASSEMBLY_GRAPH_MATCHING_POLL_RETRY_COUNT;
+    },
+    retryDelay: JOB_STATUS_POLLING_INTERVAL_MS,
+  }
+);</pre>
+  <p><code>retry</code> の意味を言葉にすると、「5xx や 404 は 3 回連続で失敗したら諦める (<code>job_status_unavailable</code>)。10 秒 timeout は時計を進めるための失敗なので回数に数えない。ただし何であれ 180 秒を超えたら止める」。</p>
+
+  <h4>C-2. 局面の判定木</h4>
+  <p><code>deriveAssemblyExcelImportOutcome</code> は局面と失敗原因を<b>同じ 1 本の判定木</b>で返す (公開する 2 関数 <code>deriveAssemblyExcelImportPhase</code> / <code>deriveAssemblyExcelImportFailureReason</code> はその包み)。判定の順序が仕様そのものなので、そのまま書き出す。</p>
+  <ol>
+    <li>mutation が pending → <code>uploading</code></li>
+    <li>mutation が error → <code>failed</code> (<code>start_matching</code>)</li>
+    <li>mutation に data がない → <code>idle</code></li>
+    <li>job_status が<b>終端</b> (finished / failed / retrying) なら中身を見る:
+      <ul>
+        <li>failed / retrying → <code>failed</code> (<code>job_failed</code>)</li>
+        <li>finished で <code>output.kind</code> が internal_error → <code>failed</code> (<code>job_internal_error</code>)、想定外 → <code>job_output_unknown</code></li>
+        <li>error_csv → <code>validationFailed</code></li>
+        <li>result で結果 query が error → <code>failed</code> (<code>result_unavailable</code>)、data 待ち → <code>matching</code>、data あり → <code>matched</code></li>
+      </ul>
+    </li>
+    <li>終端でなく、最後の応答時刻が起票から 180 秒以上 → <code>failed</code> (<code>polling_timed_out</code>)</li>
+    <li>終端でなく、query が error (retry を使い切った) → <code>failed</code> (<code>job_status_unavailable</code>)</li>
+    <li>それ以外 → <code>matching</code></li>
+  </ol>
+  <p>4 が 5 より先にあることが、「180 秒ちょうどに届いた成功応答を捨てない」を保証する。逆に 5 が 6 より先にあることで、「10 秒 timeout で query が error のまま 180 秒を迎えた」ケースが <code>job_status_unavailable</code> ではなく <code>polling_timed_out</code> として New Relic に残る。</p>
+
+  <h4>C-3. 失敗を New Relic に 1 回だけ送る</h4>
+<pre><span class="c">// failed 局面になるたびに 1 回だけ New Relic に残す。依存は原因だけにして、他の値の更新では再送しない</span>
+useEffectOnUpdate(() =&gt; {
+  <span class="k">if</span> (failureReason == null) <span class="k">return</span>;
+  captureException(<span class="k">new</span> Error(<span class="s">`組図エクセルの照合に失敗しました: ${failureReason}`</span>), {
+    kind: NR_EXCEPTION_KIND.ASSEMBLY_GRAPH_MATCHING,
+    reason: failureReason,           <span class="c">// NRQL の FACET で分ける</span>
+    drawingId,
+    ...(jobStatusId != null &amp;&amp; { jobStatusId }),
+    ...buildFailureDetail(failureReason, { startMatchingError, jobStatus, jobStatusError, resultError }),
+  });
+}, [failureReason]);</pre>
+  <p>純粋関数に副作用を置かず、hook 側で「原因が決まった瞬間」を <code>useEffectOnUpdate</code> で 1 回だけ拾う。<code>buildFailureDetail</code> は原因ごとに調査の起点になる属性 (HTTP status、最後に見たジョブ状態など) を添える。エラー CSV の保存失敗も同じ kind で <code>reason: 'error_csv_download'</code> として別に送る。</p>
+
+  <!-- ---------------- D ---------------- -->
+  <h3 id="code-d">D. コンテナと共通モーダル部品</h3>
+  <p><code>AssemblyExcelImportEditModals.tsx</code> (112 行) は局面表を JSX にしたもの。3 つだけ補足する。</p>
+  <ul>
+    <li><b>バリデーション失敗の閉じ方</b>: <code>AlertModal</code> の <code>onClose</code> に「CSV を保存してから閉じる」を渡す。保存に失敗したらトーストを出してモーダルは残す (押し直せる)。閉じるボタンが非同期処理を伴うので、<code>AlertModal</code> に <code>isCloseButtonLoading</code> と <code>shouldCloseOnOverlayClick</code> の 2 props が追加された。枠外クリックで閉じると副作用 (ダウンロード) が走ってしまうため、ここでは <code>false</code>。</li>
+    <li><b>確認モーダルは matched の間だけマウント</b>: 下書き (Map) はモーダル内の state なので、unmount で捨てられる。再照合すれば新しい下書きから始まる。</li>
+    <li><b>背面スクロールロックの直し方</b>: <code>ModalFrame</code> は <code>onAfterOpen</code> で <code>document.body.style.overflow = 'hidden'</code> を直接書いていた。モーダルを 2 枚重ねて内側を閉じると外側のロックまで外れ、開いたまま unmount するとロックが残る。<code>react-modal</code> が body に付ける <code>ReactModal__Body--open</code> クラスに対して <code>customTheme</code> のグローバル CSS で <code>overflow: hidden</code> を当てる方式に変えた。1 枚でも開いていればクラスが付き、全部閉じれば外れる。回帰 spec は <code>ModalFrame.spec.tsx</code>。</li>
+  </ul>
+
+  <!-- ---------------- E ---------------- -->
+  <h3 id="code-e">E. 「階層の確認・編集」モーダル</h3>
+
+  <div class="figure">
+    <div class="ui-modal" style="max-width:720px">
+      <div class="ui-head"><span>階層の確認・編集</span></div>
+      <div class="ui-body">
+        <div class="ui-msg"><span class="dot red"></span><span>未確定が <b class="count">1</b> 件あります。図面を選択するか、組図から除外してください。</span></div>
+        <div class="ui-msg"><span class="dot orange"></span><span>元の組図にあるが、組図から外れる図面が <b class="count">3</b> 件あります。</span> <span class="ui-link">確認する</span></div>
+        <div style="border:1px solid var(--line); background:#f7f9fb; border-radius:6px; padding:12px; margin-top:10px; overflow-x:auto;">
+          <div class="tree">
+            <div class="col"><div class="node-card"><div class="pane"><span class="chip">エクセル</span><div class="val">ASSY-100<br>本体</div></div><div class="pane center"><span class="chip">図面</span><div class="thumb"></div></div></div></div>
+            <div class="connector multi"></div>
+            <div class="col">
+              <div class="child"><div class="node-wrap"><div class="node-card"><div class="pane"><span class="chip">エクセル</span><div class="val">PART-200<br>ねじ</div></div><div class="pane center"><span class="chip">図面</span><div class="thumb"></div></div></div><div class="revert">↶ 未確定に戻す</div></div></div>
+              <div class="child"><div class="node-card unresolved"><div class="pane"><span class="chip">エクセル</span><div class="val">PART-999<br></div></div><div class="pane center"><span class="chip">図面</span><div class="alert">図面が見つかりません</div><span class="mini">図面を選択</span><br><span class="mini ghost">組図から除外</span></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-foot"><span class="ui-btn">キャンセル</span><span class="ui-btn primary disabled">保存</span></div>
+    </div>
+    <div class="caption"><code>AssemblyHierarchyConfirmModal</code> (1000px × 90vh)。ヘッダー直下に 2 行の件数メッセージ、中央に React Flow のツリー (ここだけスクロール)、フッターに保存。未確定が 1 件残っているので保存は disabled。</div>
+  </div>
+
+  <h4>E-1. 状態の置き場: Provider + hook</h4>
+  <p>React Flow のノードコンポーネントは親から props を受け取れない (React Flow が <code>nodeTypes</code> からインスタンス化する)。そこで <code>AssemblyHierarchyDraftProvider</code> が <code>useAssemblyHierarchyDraft(matchingResult)</code> の戻り値 (overrides、導出済み view、操作関数、<code>isInitialLayoutDone</code>) と <code>columns</code> を Context で配る。ノードもヘッダーもサブモーダルも <code>useAssemblyHierarchyDraftContext()</code> から読む。</p>
+  <p><code>useAssemblyHierarchyDraft</code> の state は <code>overrides</code> (Map)、<code>selectRequest</code> (どの行のためにどちらの選択モーダルを開いているか)、<code>isInitialLayoutDone</code> の 3 つだけ。<code>view</code> は <code>useMemo(() =&gt; deriveAssemblyHierarchyDraftView(result, overrides))</code>。</p>
+
+  <h4>E-2. 導出関数 <code>deriveAssemblyHierarchyDraftView</code></h4>
+  <p>2.3 の集合計算の実装。読むときは 4 つの walk を意識するとよい。</p>
+  <ol>
+    <li><code>collectPopulation</code>: tree の確定図面と全候補、<code>unmatched_drawings</code>、<code>detached_drawings</code> を id で 1 本化して population にする。</li>
+    <li><code>walkPlacement</code>: 根から降り、除外行の配下を <code>hiddenRowNumbers</code> に、それ以外を <code>visibleNodes</code> に振り分ける。同時に「保存されるツリーの図面」<code>placedDrawingIds</code> と「除外配下に居た図面」<code>drawingIdsUnderExclusion</code> を集める。</li>
+    <li>可視ノードごとに <code>MatchingNodeView</code> (confirmed / selected / multiple_candidates / no_candidates / excluded) を決め、未確定を数え、未解決行の候補 id を集める。</li>
+    <li><code>detachedDrawings = population − placed − 未解決行の候補</code>、<code>droppedByExclusionDrawingIds = 除外配下の図面 − placed</code> (他の場所にも置かれていれば落とさない)。</li>
+  </ol>
+  <p>返り値の <code>canSave</code> は <code>unconfirmedCount === 0</code>。保存ボタンの disabled はこの 1 値を見る。</p>
+
+  <h4>E-3. ツリー描画</h4>
+  <table>
+    <tr><th>ファイル</th><th>やること</th></tr>
+    <tr><td><code>tree/makeMatchingNodesAndEdges.ts</code></td><td>結果 tree → React Flow のノード (<code>type: 'matching'</code>, id は <code>matching:{row_number}</code>, 位置は全部原点) とエッジ。data は <code>{ rowNumber, values, sort, level }</code> の不変情報だけ</td></tr>
+    <tr><td><code>tree/AssemblyMatchingTree.tsx</code></td><td>自前の <code>ReactFlowProvider</code> で包む (組図タブの Provider を Portal 越しに継承しない)。<code>nodesDraggable=false</code>、<code>onlyRenderVisibleElements</code>、<code>panOnScroll</code>。<code>hiddenRowNumbers</code> が変わるたびに該当ノード / エッジの <code>hidden</code> を写す。初回レイアウト完了で viewport を左上に合わせ、<code>markInitialLayoutDone()</code></td></tr>
+    <tr><td><code>tree/useMatchingTreeAutoLayout.ts</code></td><td>可視ノード全員の実寸が揃うたびに <code>layoutTreeHorizontalTopSticky</code> を呼び、位置を書き戻す。入力 (id / hidden / measured / position) が前回と同じなら計算しない。選択や除外でノードの高さが変わると React Flow が実寸を更新し、それが差分になって再レイアウトされる。例外は <code>captureException</code> + トースト</td></tr>
+    <tr><td><code>tree/nodes/MatchingNode.tsx</code></td><td>2 ペインカード。左はエクセルの値を <code>columns</code> の順に (空欄も行として残す)、右は <code>MatchingNodeDrawingPane</code>。未解決は赤枠、除外はグレー。選択済み / 除外の行はカード直下に「未確定に戻す」。Handle はカード内に置き、透明 + <code>pointer-events: none</code> (右端の handle がボタンのクリックを奪わないように)</td></tr>
+    <tr><td><code>tree/nodes/MatchingNodeDrawingPane.tsx</code></td><td>右ペインの出し分け。確定 / 選択済み → サムネイル (押下で <code>DrawingPreviewModal</code>) + 右上に図面詳細 (別タブ)。候補が複数 → 「候補が N 件見つかりました」+「候補から選ぶ」。候補なし → 「図面が見つかりません」+「図面を選択」+「組図から除外」。除外 → ラベルのみ</td></tr>
+  </table>
+
+  <h4>E-4. サブモーダル</h4>
+  <ul>
+    <li><code>drawing_select_modal/MatchingDrawingSelectModal.tsx</code>: 「候補から選ぶ」(その行の BE 候補全件) と「図面を選択」(<code>unmatched_drawings</code> 全件) で共用。<code>kind</code> で説明文と空表示が変わる。開くたびに先頭を初期選択に戻す。0 件なら「紐づけられる図面がありません。組図から除外してください。」を出して選択を disable。</li>
+    <li><code>drawing_select_modal/MatchingDrawingCard.tsx</code>: カード型 radio (<code>useRadio</code>)。中身の <code>MatchingDrawingCardBody</code> は <code>useOnInView</code> で見えてからサムネイルを取りに行く。「外れる図面」一覧でも同じ Body を使う。</li>
+    <li><code>detached_drawings_modal/DetachedDrawingsModal.tsx</code>: 「確認する」から開く一覧。選択操作は無い。</li>
+  </ul>
+
+  <h4>E-5. 保存</h4>
+  <p><code>functions/serializeAssemblyHierarchyDraftForSave.ts</code> は root が confirmed で <code>drawing.id === result.drawing_id</code> でなければ <code>undefined</code> を返す (BE 契約違反。保存側で <code>reason: 'save_payload_invalid'</code> を New Relic に送る)。未解決の行が残っていても <code>undefined</code>。<code>hooks/useSaveAssemblyHierarchyDraft.ts</code> は 2.4 の 3 段を <code>useCallback</code> の中で順に呼ぶ。<code>isSavingRef</code> で連打を防ぎ、成功時は <code>invalidateAssemblyDrawingQueries</code> → <code>customToast(t.saved1)</code> → <code>onSaved()</code> (全モーダルを閉じる)。axios の失敗はトーストと New Relic を interceptor が担うので、ここでは非 axios の例外だけを送る。</p>
+
+  <!-- ---------------- F ---------------- -->
+  <h3 id="code-f">F. 組図ツリー共通部品の集約</h3>
+  <p><code>src/features/shared/assembly_tree/AssemblyTree.tsx</code> がバレル。<code>dependency-cruiser</code> の feature-entry-only ルールにより、feature 外からの import はこのファイル経由に限られる。</p>
+  <table>
+    <tr><th>移動 / 新設</th><th>元の場所</th></tr>
+    <tr><td><code>layoutTreeHorizontalTopSticky.ts</code> (新設, 165 行 + spec 207 行)</td><td><code>useHorizontalTopStickyLayoutAlgorithm.ts</code> の中身 (−300 行)</td></tr>
+    <tr><td><code>AssemblyDrawingTreeScrollbars.tsx</code>, <code>computeAssemblyDrawingScrollMetrics.ts</code></td><td><code>views/…/tree/</code>, <code>views/…/tree/layout_metrics/</code></td></tr>
+    <tr><td><code>edgeFunctions.ts</code> (<code>makeEdge</code>, <code>changeEdgeMode</code>)</td><td><code>views/…/tree/graph_construction/</code></td></tr>
+    <tr><td><code>invalidateAssemblyDrawingQueries.ts</code></td><td><code>views/…/upload_reflection/</code></td></tr>
+    <tr><td><code>constants.ts</code> (<code>MAX_LEVEL</code>, スクロール領域の寸法)</td><td><code>views/…/assembly_drawing_tab_inner/constants.ts</code> (残るのはフォーカスボタン余白だけ)</td></tr>
+  </table>
+  <p>既存側の <code>useHorizontalTopStickyLayoutAlgorithm</code> は、React Flow ノードを <code>TreeLayoutNode</code> に写して純粋関数を呼び、返った位置を書き戻すアダプタになった。「図面を選択」プレースホルダは <code>isPlacedLast: true</code> で兄弟の末尾に固定する。</p>
+
+  <!-- ---------------- G ---------------- -->
+  <h3 id="code-g">G. サムネイル取得の変更 (既存ツリーも含む)</h3>
+  <p>BE 契約の変更 (<code>thumbnail_url</code> / <code>preview_page_count</code> 削除 → <code>drawing_file_id</code> 追加) は結果 JSON だけでなく既存の <code>GET /drawings/{id}/assembly_graph</code> にも及ぶので、既存ツリーの追従が同じ PR に入っている。</p>
+  <ul>
+    <li><code>types/drawing.ts</code>: <code>DrawingNodeWithChildrenInDb.thumbnail_url?</code> → <code>drawing_file_id?: DrawingFile['id']</code>。<code>preview_page_count</code> は削除。</li>
+    <li><code>views/…/DrawingNode.tsx</code>: <code>data.drawing.thumbnailUrl</code> → <code>drawingFileId</code>。<code>useBatchedDrawingFileUrlsQuery({ drawingFileId: isLayoutSettled ? drawingFileId : undefined })</code> で URL を解決し、ページ数は <code>previews.length</code>。解決中は 100×100 の <code>Skeleton</code> (ノードの高さ = レイアウト計算の入力を変えないため)。</li>
+    <li><code>views/…/useAutoLayout.ts</code>: 位置を書く <code>setNodes</code> の中で <code>node.data.isLayoutSettled = true</code>。画面外ノードが unmount する描画と同時に、残った可視ノードだけがサムネイルを取り始める。</li>
+    <li><code>apis/drawing_files/useBatchedDrawingFileUrlsQuery.ts</code>: 2.5 のバッチローダー。queryKey は <code>['getDrawingFileUrls', id]</code> なので、既存の prefix invalidate に乗る。2xx なのに要求 id が返らなければ <code>NR_EXCEPTION_KIND.DRAWING_FILE_URLS</code> + <code>reason: 'missing_ids'</code> でチャンクにつき 1 件送る。</li>
+  </ul>
+
+  <!-- ---------------- H ---------------- -->
+  <h3 id="code-h">H. テスト基盤: Jest に MSW を配線</h3>
+  <p>本物の react-query で「mutation → query → query」の連鎖を回すために、spec ファイル単位で opt-in できる MSW 環境を作った。</p>
+<pre><span class="c">/** @jest-environment &lt;rootDir&gt;/src/tests/mswTestEnvironment.js */</span>
+jest.mock(<span class="s">'@tanstack/react-query'</span>, () =&gt; jest.requireActual(<span class="s">'@tanstack/react-query'</span>)); <span class="c">// common.ts のモックを戻す</span>
+
+beforeAll(() =&gt; server.listen({ onUnhandledRequest: <span class="s">'error'</span> }));
+afterEach(() =&gt; server.resetHandlers());
+
+<span class="k">const</span> { handlers, getPatchedAssemblyGraphBodies } = createAssemblyGraphMatchingHandlers({
+  jobStatusSteps: [executingStep, finishedWithResultStep],   <span class="c">// GET /job_statuses の応答を呼ばれた順に返す</span>
+});
+server.use(...handlers);</pre>
+  <ul>
+    <li><code>src/tests/mswTestEnvironment.js</code>: 設定の <code>testEnvironment</code> (happy-dom) を基底にしたまま、<code>customExportConditions: ['']</code> (これが無いと <code>msw/node</code> がブラウザ扱いで落ちる) と、Node のネットワーク系グローバル (<code>fetch</code>, <code>Response</code>, <code>BroadcastChannel</code> …) を<b>基底に無いものだけ</b>足す。基底クラスを実行時に解決するので、jsdom → happy-dom の移行 (PR #4292) をまたいでも動く。</li>
+    <li><code>mocks/handlers/assemblyGraphMatching.ts</code>: 署名付き URL 取得 → GCS PUT → 起票 → job_statuses → download_signed_urls → GCS GET → PATCH の全部を 1 セットで模倣。<code>jobStatusSteps</code> / 各 HTTP status / 結果 JSON の中身を差し替えて局面を作る。呼び出し回数と PATCH ボディを返すので、副作用まで assert できる。</li>
+    <li><code>jest.config.js</code>: msw の依存 <code>rettime</code> / <code>@open-draft/deferred-promise</code> / <code>until-async</code> を ESM 変換対象に追加。<code>testPathIgnorePatterns</code> に <code>/\.claude/</code>。</li>
+    <li>主な spec: <code>AssemblyExcelImportEditModals.spec.tsx</code> (15 シナリオ: 正常 / error_csv / internal_error / failed / 5xx 3 連続 / GCS PUT 失敗 / 閉じる確認 …)、<code>.timeout.spec.tsx</code> (180 秒。定数を <code>jest.mock('@/constants')</code> で縮める)、<code>AssemblyHierarchyConfirmModal.spec.tsx</code> (11: 候補選択 / 除外 / 戻す / 件数 / 保存 PATCH ボディ / 連打)、<code>deriveAssemblyExcelImportPhase.spec.ts</code> (境界値)、<code>deriveAssemblyHierarchyDraftView.spec.ts</code>、<code>layoutTreeHorizontalTopSticky.spec.ts</code>、<code>useBatchedDrawingFileUrlsQuery.spec.tsx</code> (25 件 → 20 + 5)、<code>ModalFrame.spec.tsx</code> (スクロールロック回帰)。</li>
+  </ul>
+
+  <!-- ---------------- I ---------------- -->
+  <h3 id="code-i">I. レビューで直した 6 点</h3>
+  <p>PR を Ready にする前の <code>/review</code> (Claude 構造化 + Claude/Codex adversarial + Codex 構造化) で見つかり、最終コミット <code>d2de349e5</code> に入ったもの。どれも「動くが、ある条件でユーザーに嘘をつく」類。</p>
+  <table>
+    <tr><th>#</th><th>症状</th><th>直し</th></tr>
+    <tr><td>1</td><td>バリデーション失敗の文言が「<b>件</b>にエラーがあったため…」と件数が空で出る。FE は <code>output.error_count</code> を読んでいたが BE は <code>kind</code> しか返さない</td><td>文言を「エラーがあったため、エクセルファイルをアップロードできませんでした。」に。型からも <code>error_count</code> / <code>summary</code> / <code>exception_message</code> を消した</td></tr>
+    <tr><td>2</td><td>保存時の自己修復 (<code>appendUploadedChildrenMissingFromSavedTree</code>) に除外配下の id しか渡していず、「組図から外れる図面」が直前のアップロード由来なら戻されうる</td><td><code>removedChildDrawingIds</code> = 除外配下 ∪ 外れる図面</td></tr>
+    <tr><td>3</td><td>10 秒 timeout のたびに interceptor の「処理に失敗しました」トーストが出る。しかも <code>retry: 2</code> と組み合わさると約 36 秒で <code>job_status_unavailable</code> になり、180 秒に届かない</td><td>axios config に <code>skipErrorToast</code> を追加 (<code>declare module 'axios'</code> で型拡張) し、ポーリングの timeout 付き GET だけ interceptor の応答なし分岐を抜ける。<code>retry</code> は ETIMEDOUT なら回数に数えない</td></tr>
+    <tr><td>4</td><td>#3 の直しの副作用: ETIMEDOUT の無制限 retry 中は <code>errorUpdatedAt</code> が進まず、BE がハングすると 180 秒を過ぎても <code>matching</code> のまま (Claude / Codex 両方が指摘)</td><td><code>retry</code> の先頭で <code>Date.now() - pollingStartedAt ≥ 180s</code> なら <code>false</code></td></tr>
+    <tr><td>5</td><td>期限判定が終端判定より先にあり、180 秒ちょうどに届いた <code>result</code> を <code>polling_timed_out</code> として捨てる</td><td>判定木で終端を先に見る (C-2 の順序)。spec を 1 本追加</td></tr>
+    <tr><td>6</td><td><code>AssemblyGraphMatchingJobOutput</code> を単一オブジェクトに縮めたら <code>Extract</code> が <code>never</code> になり typecheck 失敗 (B の callout)</td><td>判別 union に戻す</td></tr>
+  </table>
+  <div class="callout warn">
+    <span class="label">見送った指摘 (別タスク候補)</span>
+    エラー CSV が取れないとバリデーション失敗モーダルから抜けられない (Esc も枠外も無効) / 保存中もツリー操作ができ、クリック時点のスナップショットが保存される / テンプレート DL の 422 が blob 応答のため無言で失敗し New Relic にも残らない。いずれも QA で踏むならユーザーの目に見えるので、次に手を入れる候補。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="quiz" class="quiz">
+  <h2>4. クイズ — 理解度チェック<small>5 問。選択肢をクリックすると正誤と解説が出る</small></h2>
+
+  <div class="q" data-answer="c">
+    <h4>Q1. 起票から<b>ちょうど 180 秒</b>後のポーリング応答が <code>status: "finished"</code>, <code>output.kind: "result"</code> だった。結果 JSON の取得は次のレンダーで始まるとして、この応答を受けた直後の <code>phase</code> は?</h4>
+    <div class="opts">
+      <button class="opt" data-key="a">A. <code>failed</code> (原因 <code>polling_timed_out</code>)。180 秒に達したら中身は見ない</button>
+      <button class="opt" data-key="b">B. <code>validationFailed</code>。180 秒を超えた結果はエラーレポート扱いになる</button>
+      <button class="opt" data-key="c">C. <code>matching</code>。終端応答を期限より先に見るので捨てられず、結果 JSON が届けば <code>matched</code> になる</button>
+      <button class="opt" data-key="d">D. <code>idle</code>。期限切れで mutation が自動 reset される</button>
+    </div>
+    <div class="fb" data-ok="正解。判定木は「終端 (finished / failed) の中身」→「期限」→「query error」の順。180 秒ちょうどに届いた成功は拾い、結果 JSON を待つ間は <code>matching</code>、届けば <code>matched</code>。レビュー前は期限判定が先にあり、この応答を <code>polling_timed_out</code> として捨てていた。" data-ng="不正解。<code>deriveAssemblyExcelImportOutcome</code> は job_status が終端なら先にその中身を見る。期限判定 (<code>getLastSettledAt − pollingStartedAt ≥ 180s</code>) は終端でないときだけ効く。よってこの応答は捨てられず <code>matching</code> → <code>matched</code> に進む。"></div>
+  </div>
+
+  <div class="q" data-answer="b">
+    <h4>Q2. 結果 JSON が root 53、行 3 = 候補 [201, 202]、行 4 = 候補なし、<code>unmatched_drawings</code> = [201, 202, 300, 400]、<code>detached_drawings</code> = [300, 400] のとき、ユーザーが<b>行 3 で 201 を選んだ</b>直後の「組図から外れる図面」の件数は?</h4>
+    <div class="opts">
+      <button class="opt" data-key="a">A. 2 件 (300, 400)。候補の選択は外れる件数に影響しない</button>
+      <button class="opt" data-key="b">B. 3 件 (202, 300, 400)。選ばれなかった候補 202 はもうどの行にも置かれないから</button>
+      <button class="opt" data-key="c">C. 1 件 (400)。201 と 300 が保存ツリーに入る</button>
+      <button class="opt" data-key="d">D. 4 件。行 4 が未解決なので population 全部が外れる扱い</button>
+    </div>
+    <div class="fb" data-ok="正解。<code>detached = population − placed − 未解決行の候補</code>。population = {53, 201, 202, 300, 400}、placed = {53, 201}、行 3 は解決したので未解決行の候補は空。差集合は {202, 300, 400} で 3 件。初期値 (2 件) から増える。" data-ng="不正解。式は <code>detached = population − placed − 未解決行の候補</code>。201 を選ぶと placed に 201 が入るが、同時に行 3 が解決するので候補 202 は「未解決行の候補」から外れ、どこにも置かれない図面として detached に入る。よって {202, 300, 400} の 3 件。"></div>
+  </div>
+
+  <div class="q" data-answer="d">
+    <h4>Q3. BE が結果 JSON に署名付き <code>thumbnail_url</code> を埋めるのをやめ、<code>drawing_file_id</code> だけを返すことにした理由として、<b>この PR の設計で実際に挙がったもの</b>はどれ?</h4>
+    <div class="opts">
+      <button class="opt" data-key="a">A. 署名付き URL は JSON に入れるとサイズが 5MB を超え、GCS の上限に当たる</button>
+      <button class="opt" data-key="b">B. FE 側で画像を <code>&lt;img&gt;</code> に出すには <code>drawing_file_id</code> が必須で、URL だけでは表示できない</button>
+      <button class="opt" data-key="c">C. サムネイルは Ph2 のスコープなので、Ph1 では id だけ持っておく</button>
+      <button class="opt" data-key="d">D. worker 上での署名は 1 件ごとに IAM への往復になり最大 4,311 件で 180 秒を食い尽くす見積りで、かつ URL は 1 時間で切れるため長い確認作業で画像が壊れる</button>
+    </div>
+    <div class="fb" data-ok="正解。BE 設計書 決定 27。FE は既存の <code>GET /drawing_files/urls</code> を <code>useBatchedDrawingFileUrlsQuery</code> で 20 件ずつ束ね、10 分の staleTime で必要なときに解決する。" data-ng="不正解。理由は性能と寿命の 2 つ。GKE worker (Workload Identity) の V4 署名は IAM <code>signBlob</code> の HTTPS 往復になり、4,311 件 × 約 40ms で 180 秒のジョブ時間に収まらない。加えて署名付き URL は 1 時間で失効し、確認作業が長引くとサムネイルが壊れる。だから id を返し、FE が必要なときに URL に解決する。"></div>
+  </div>
+
+  <div class="q" data-answer="c">
+    <h4>Q4. 確認モーダルで「候補なし」の行 (配下に 2 行ある) を<b>組図から除外</b>した。正しい説明はどれ?</h4>
+    <div class="opts">
+      <button class="opt" data-key="a">A. その行だけがグレーになり、配下 2 行は未確定として数え続ける</button>
+      <button class="opt" data-key="b">B. その行と配下は保存 PATCH からは落ちるが、配下の図面はバックグラウンドの自己修復で必ず組図に戻る</button>
+      <button class="opt" data-key="c">C. その行はグレーで残り、配下 2 行は <code>hiddenRowNumbers</code> に入って描かれず・数えられず・保存されない。配下で落ちた図面 id は <code>removedChildDrawingIds</code> として保存 hook に渡り、自己修復が戻さない</button>
+      <button class="opt" data-key="d">D. 除外は <code>overrides</code> から行を削除することで表現され、「未確定に戻す」はキーを追加する</button>
+    </div>
+    <div class="fb" data-ok="正解。<code>deriveAssemblyHierarchyDraftView</code> の <code>walkPlacement</code> が除外行の子孫を hidden に振り分け、<code>droppedByExclusionDrawingIds</code> (除外配下 − placed) を返す。<code>AssemblyHierarchyConfirmModal</code> はそれと外れる図面の和集合を <code>useSaveAssemblyHierarchyDraft</code> に渡す。除外は <code>overrides.set(row, { kind: 'excluded' })</code>、戻すは <code>delete</code>。" data-ng="不正解。除外行自身は描かれる (グレー + 「未確定に戻す」) が、配下は <code>hiddenRowNumbers</code> に入り、描かない・数えない・保存しない。さらに配下で落ちた図面 id は「ユーザーが外した子」として保存時の自己修復 (<code>appendUploadedChildrenMissingFromSavedTree</code>) に渡され、戻されない。overrides への操作は set (除外) / delete (戻す)。"></div>
+  </div>
+
+  <div class="q" data-answer="b">
+    <h4>Q5. <code>ModalFrame</code> が <code>document.body.style.overflow</code> を直接書くのをやめ、<code>body.ReactModal__Body--open { overflow: hidden }</code> というグローバル CSS に変えた。直接書く方式で起きていた問題は?</h4>
+    <div class="opts">
+      <button class="opt" data-key="a">A. Next.js の SSR で <code>document</code> が無く、ビルドが落ちる</button>
+      <button class="opt" data-key="b">B. モーダルを重ねて内側を閉じると外側のロックまで外れ、開いたまま unmount するとロックが残る</button>
+      <button class="opt" data-key="c">C. Chakra UI のテーマと競合して、モーダルの背景色が変わる</button>
+      <button class="opt" data-key="d">D. <code>overflow: hidden</code> ではモバイル Safari のスクロールが止まらない</button>
+    </div>
+    <div class="fb" data-ok="正解。この機能は「処理中の閉じる確認」でモーダルが 2 枚重なる。<code>onAfterClose</code> で無条件に <code>unset</code> すると内側を閉じた瞬間に背面がスクロールできてしまう。react-modal は 1 枚以上開いている間だけ body にクラスを付けるので、CSS で当てれば枚数を数えなくてよい。回帰 spec は <code>ModalFrame.spec.tsx</code>。" data-ng="不正解。問題は多重モーダル。<code>onAfterOpen</code> / <code>onAfterClose</code> で body.style を書くと、内側のモーダルを閉じた瞬間に外側のロックまで外れ、逆に開いたまま unmount されるとロックが残る。react-modal が付ける <code>ReactModal__Body--open</code> クラスは「1 枚以上開いている」を表すので、それに CSS を当てるだけで正しく振る舞う。"></div>
+  </div>
+
+  <div class="score" id="score"></div>
+</section>
+
+</main>
+
+<footer>PR #4325 / feature/murakami/assembly-excel-import-ph1 → dev · 生成日 2026-09-16</footer>
+
+<script>
+(function () {
+  var questions = document.querySelectorAll('.quiz .q');
+  var answered = 0, correct = 0;
+  var score = document.getElementById('score');
+
+  questions.forEach(function (q) {
+    var answer = q.getAttribute('data-answer');
+    var fb = q.querySelector('.fb');
+    var opts = q.querySelectorAll('button.opt');
+    opts.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-key');
+        var isCorrect = key === answer;
+        opts.forEach(function (b) {
+          b.disabled = true;
+          if (b.getAttribute('data-key') === answer) b.classList.add('correct');
+        });
+        if (!isCorrect) btn.classList.add('wrong');
+        fb.innerHTML = (isCorrect ? '<b>正解 ✔</b> ' : '<b>不正解 ✘</b> ') + fb.getAttribute(isCorrect ? 'data-ok' : 'data-ng');
+        fb.classList.add('show', isCorrect ? 'ok' : 'ng');
+        answered += 1;
+        if (isCorrect) correct += 1;
+        score.textContent = answered + ' / ' + questions.length + ' 問回答 — 正解 ' + correct + ' 問' +
+          (answered === questions.length ? (correct === questions.length ? '。全問正解、この PR は読めている。' : '。間違えた問いの解説を読み返すと、この PR の芯が掴める。') : '');
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
