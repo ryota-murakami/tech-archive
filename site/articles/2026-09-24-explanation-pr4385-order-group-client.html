@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="顧客名を選ぶと入力した案件グループ名が消える不具合。新しい名前は残し、既存グループだけを選んだ時点の顧客と比べて外す PR #4385 の解説。" />
+<meta name="archive:title" content="顧客名を選んだら、入力した案件グループ名が消えた — PR #4385 を読む" />
+<meta name="archive:published" content="2026-09-24" />
+<meta name="archive:type" content="Explain Diff" />
+<meta name="archive:source" content="zumen-fe · #4385" />
+<meta name="archive:category" content="React Hook Form" />
+<meta name="archive:category" content="React" />
+<meta name="archive:category" content="Forms" />
+<meta name="archive:category" content="Frontend" />
+<meta name="archive:reading-minutes" content="16" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="if (!('id' in orderGroup)) return false // keep new name" />
+<title>PR #4385 解説 — 顧客名を選んでも案件グループ名が消えないようにする</title>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #59636e;
+    --bg: #ffffff;
+    --soft: #f6f8fa;
+    --line: #d1d9e0;
+    --blue: #1976d2;
+    --blue-soft: #e9f4ff;
+    --green: #1a7f37;
+    --green-soft: #dafbe1;
+    --red: #cf222e;
+    --red-soft: #ffebe9;
+    --amber: #9a6700;
+    --amber-soft: #fff8c5;
+    --purple: #8250df;
+    --purple-soft: #fbefff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--fg);
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif;
+    line-height: 1.85;
+    font-size: 16px;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 120px; }
+  h1 { font-size: 1.75rem; line-height: 1.4; margin: 0 0 8px; }
+  h2 {
+    font-size: 1.4rem;
+    margin: 64px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--line);
+  }
+  h3 { font-size: 1.12rem; margin: 36px 0 10px; }
+  p { margin: 12px 0; }
+  a { color: var(--blue); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.88em;
+    background: var(--soft);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  pre {
+    white-space: pre;
+    overflow-x: auto;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  pre code { background: none; border: 0; padding: 0; color: inherit; font-size: inherit; }
+  .add { color: #7ee787; }
+  .del { color: #ffa198; }
+  .cm { color: #8b949e; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .chip {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--soft);
+    color: var(--muted);
+  }
+  nav.toc {
+    background: var(--soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 22px;
+  }
+  nav.toc ol { margin: 6px 0 0; padding-left: 22px; }
+  nav.toc li { margin: 2px 0; }
+  .callout {
+    border-left: 4px solid var(--blue);
+    background: var(--blue-soft);
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 18px 0;
+  }
+  .callout.warn { border-color: var(--amber); background: var(--amber-soft); }
+  .callout.bad { border-color: var(--red); background: var(--red-soft); }
+  .callout.good { border-color: var(--green); background: var(--green-soft); }
+  .callout.def { border-color: var(--purple); background: var(--purple-soft); }
+  .callout .ttl { font-weight: 700; display: block; margin-bottom: 4px; }
+  details.skip {
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin: 16px 0;
+  }
+  details.skip summary { cursor: pointer; font-weight: 700; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  .tbl-wrap { overflow-x: auto; }
+  .ok { color: var(--green); font-weight: 700; }
+  .ng { color: var(--red); font-weight: 700; }
+
+  /* ---------- 図の家族 1: 簡略化したモーダル ---------- */
+  .mock-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; margin: 18px 0; }
+  .mock {
+    flex: 1 1 220px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    padding: 12px 14px 14px;
+    min-width: 200px;
+  }
+  .mock .step { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .mock .mtitle { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+  .field { margin: 6px 0; }
+  .field .lbl { font-size: 11px; color: var(--muted); }
+  .field .box {
+    border: 1px solid #c8ced6;
+    background: #f4f4f4;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    min-height: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .field .box.placeholder { color: #999; }
+  .field .box.hl-good { outline: 2px solid var(--green); background: var(--green-soft); }
+  .field .box.hl-bad { outline: 2px solid var(--red); background: var(--red-soft); }
+  .field .box.hl-focus { outline: 2px solid var(--blue); }
+  .field .box .tag {
+    font-size: 10px; padding: 0 6px; border-radius: 999px; background: #fff; border: 1px solid var(--line); color: var(--muted);
+  }
+  .dropdown {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+    margin-top: 2px;
+  }
+  .dropdown div { padding: 3px 8px; }
+  .dropdown .hint { color: var(--muted); font-style: italic; }
+  .dropdown .create { color: var(--blue); }
+  .dropdown .sel { background: #cfe3fb; }
+  .arrow-h { align-self: center; font-size: 22px; color: var(--muted); }
+
+  /* ---------- 図の家族 2: データの流れ ---------- */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .node {
+    flex: 1 1 150px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    font-size: 13px;
+  }
+  .node .nt { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .node.fe { border-top: 4px solid var(--blue); }
+  .node.api { border-top: 4px solid var(--amber); }
+  .node.be { border-top: 4px solid var(--purple); }
+  .node code { font-size: 12px; white-space: pre-wrap; }
+  .flow .arr { align-self: center; color: var(--muted); font-size: 20px; }
+
+  /* ---------- 図の家族 3: 判定の分かれ道 ---------- */
+  .tree { margin: 18px 0; }
+  .q {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: var(--soft);
+    margin: 6px 0;
+    font-size: 14px;
+  }
+  .branches { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 6px 24px; }
+  .br { flex: 1 1 220px; }
+  .br .edge { font-size: 12px; color: var(--muted); margin: 4px 0; }
+  .leaf { border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 700; }
+  .leaf.keep { background: var(--green-soft); color: var(--green); border: 1px solid #aceebb; }
+  .leaf.clear { background: var(--red-soft); color: var(--red); border: 1px solid #ffcecb; }
+
+  /* ---------- タイムライン ---------- */
+  ol.timeline { list-style: none; padding: 0; margin: 18px 0; border-left: 3px solid var(--line); }
+  ol.timeline li { position: relative; padding: 4px 0 12px 22px; font-size: 14px; }
+  ol.timeline li::before {
+    content: ""; position: absolute; left: -8px; top: 10px; width: 13px; height: 13px;
+    border-radius: 50%; background: #fff; border: 3px solid var(--blue);
+  }
+  ol.timeline li.warn::before { border-color: var(--red); }
+
+  /* ---------- クイズ ---------- */
+  .quiz { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 20px 0; }
+  .quiz .qn { font-weight: 700; margin-bottom: 8px; }
+  .quiz button.opt {
+    display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer;
+    font: inherit; font-size: 14px; line-height: 1.6; color: var(--fg);
+  }
+  .quiz button.opt:hover { background: var(--soft); }
+  .quiz button.opt.correct { background: var(--green-soft); border-color: var(--green); }
+  .quiz button.opt.wrong { background: var(--red-soft); border-color: var(--red); }
+  .quiz .fb { display: none; margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; }
+  .quiz .fb.show { display: block; }
+  .quiz .fb.good { background: var(--green-soft); }
+  .quiz .fb.bad { background: var(--red-soft); }
+  #score { font-weight: 700; }
+
+  @media (max-width: 600px) {
+    body { font-size: 15px; }
+    h1 { font-size: 1.4rem; }
+    .arrow-h, .flow .arr { transform: rotate(90deg); width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>顧客名を選んだら、入力した案件グループ名が消えた — PR #4385 を読む</h1>
+<p class="subtitle">factbase-dev/zumen-fe · <a href="https://github.com/factbase-dev/zumen-fe/pull/4385">#4385</a> · fix: 顧客名を選んでも、入力した案件グループ名が消えないようにする</p>
+<div class="meta">
+  <span class="chip">base: dev</span>
+  <span class="chip">10 ファイル / +1,012 −29 行</span>
+  <span class="chip">プロダクトコード 5 ファイル・spec 5 ファイル (差分の 89%)</span>
+  <span class="chip">元の機能: #4212「案件グルーピング」</span>
+</div>
+
+<nav class="toc">
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#tldr">先に結論 (30 秒で)</a></li>
+    <li><a href="#bg">背景 — 案件・顧客・案件グループ</a>
+      <ol>
+        <li><a href="#bg-basic">入門: 3 つの登場人物</a></li>
+        <li><a href="#bg-modal">「新規案件を作成」モーダルの案件グループ名の欄</a></li>
+        <li><a href="#bg-be">保存すると BE で何が起きるか</a></li>
+      </ol>
+    </li>
+    <li><a href="#intuition">直感 — 何が壊れていて、どう直したか</a>
+      <ol>
+        <li><a href="#int-bug">不具合の正体</a></li>
+        <li><a href="#int-ticket">チケットの修正方針では直らない</a></li>
+        <li><a href="#int-rule">新しい判定: グループの種類で分ける</a></li>
+        <li><a href="#int-clientid">「選んだ時点の顧客」を覚えさせる</a></li>
+      </ol>
+    </li>
+    <li><a href="#code">コード — 変更を順に読む</a></li>
+    <li><a href="#quiz">クイズ (5 問)</a></li>
+  </ol>
+</nav>
+
+<!-- ===================================================== -->
+<h2 id="tldr">1. 先に結論 (30 秒で)</h2>
+
+<ul>
+  <li><strong>案件グループ</strong>は、関係する複数の案件を 1 つの束にまとめる仕組みです。<strong>1 グループ = 1 顧客</strong>というルールがあります。</li>
+  <li>「新規案件を作成」モーダルの案件グループ名の欄には、<strong>既存のグループを選ぶ</strong>か、<strong>新しい名前を入力して新規作成する</strong>かの 2 通りがあります。</li>
+  <li>修正前は、顧客名を選ぶたびにこの欄が<strong>無条件で空に戻って</strong>いました。既存グループなら理にかなった処理です (別の顧客のグループかもしれないので)。ですが、入力した新しい名前は<strong>まだどの顧客のものでもない</strong>ので、消す必要がありませんでした。</li>
+  <li>修正後は、<strong>新しい名前は残し</strong>、<strong>既存グループは「選んだ時点の顧客」と違う顧客になったときだけ外します</strong>。</li>
+</ul>
+
+<p>以下では、この 4 行を 1 行ずつ説明していきます。「案件グループ」がそもそも何なのかから始めます。</p>
+
+<!-- ===================================================== -->
+<h2 id="bg">2. 背景 — 案件・顧客・案件グループ</h2>
+
+<details class="skip" open>
+<summary id="bg-basic">2-1. 入門: 3 つの登場人物 (ズメーンのデータモデルを知っている方は読み飛ばして構いません)</summary>
+
+<p>ズメーンは、製造業の見積・受注の仕事を図面を中心に管理するアプリです。この PR に出てくる言葉は 3 つだけです。</p>
+
+<div class="callout def">
+  <span class="ttl">📐 案件 (order)</span>
+  1 件の引き合い・受注の単位です。図面ファイルを持ち、ステータス (見積中、製作中…) を持ち、顧客を持ちます。案件一覧 (<code>/orders/table</code> と <code>/orders/kanban</code>) に並ぶ 1 行 / 1 枚のカードが 1 つの案件です。
+</div>
+
+<div class="callout def">
+  <span class="ttl">🏢 顧客 (client)</span>
+  案件の依頼主です。案件の「顧客名」欄で選びます。<strong>未設定 (null) でも構いません</strong>。
+</div>
+
+<div class="callout def">
+  <span class="ttl">📦 案件グループ (order group)</span>
+  関係する複数の案件をまとめる束です (#4212 で入った新しい機能)。要件定義「案件グルーピング」の決まりは次のとおりです。
+  <ul>
+    <li><strong>すべての案件は、必ずどれか 1 つのグループに属します</strong> (未分類は無い)。グループを指定せずに案件を作ると、BE がその案件のためだけの新しいグループを作ります。</li>
+    <li>グループには自動で振られる<strong>番号</strong>と、任意の<strong>名前</strong>があります。名前を使うかどうかは会社ごとの設定です。</li>
+    <li><strong>原則 1 グループ = 1 顧客</strong>。ただし<strong>顧客が null の案件は、どのグループに混ざってもよい</strong>。</li>
+  </ul>
+</div>
+
+<p>1 グループ = 1 顧客を図にすると次のようになります。</p>
+
+<div class="flow">
+  <div class="node be">
+    <div class="nt">📦 グループ #9「A社 フランジ一式」</div>
+    顧客: <strong>A社</strong><br>
+    ・案件 101 (顧客 A社)<br>
+    ・案件 102 (顧客 A社)<br>
+    ・案件 103 (顧客 null) ← 混ざってよい
+  </div>
+  <div class="node be">
+    <div class="nt">📦 グループ #10「B社 試作」</div>
+    顧客: <strong>B社</strong><br>
+    ・案件 104 (顧客 B社)<br>
+    <span class="ng">✕ 顧客 A社 の案件は入れられない</span>
+  </div>
+</div>
+
+<p>案件一覧では、「ステータスごとの設定 &gt; 表示設定」で<strong>「案件グループでまとめて表示」</strong>にしたステータスの案件が、グループ単位でまとめて並びます。</p>
+</details>
+
+<h3 id="bg-modal">2-2. 「新規案件を作成」モーダルの案件グループ名の欄</h3>
+
+<p>この PR の舞台は、案件一覧の「新規案件」ボタンから開く<strong>「新規案件を作成」モーダル</strong>です。要件定義どおり、案件グループ名の欄は<strong>左カラムの一番上</strong>、顧客名の欄はそのすぐ下にあります。</p>
+
+<div class="mock-row">
+  <div class="mock" style="max-width:360px">
+    <div class="mtitle">新規案件を作成</div>
+    <div class="field"><div class="lbl">案件グループ名</div><div class="box placeholder">案件グループ <span>▾</span></div></div>
+    <div class="field"><div class="lbl">顧客名</div><div class="box placeholder">入力すると一括で登録され… <span>▾</span></div></div>
+    <div class="field"><div class="lbl">ステータス</div><div class="box"> <span>▾</span></div></div>
+    <div class="field"><div class="lbl">見積番号</div><div class="box"></div></div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <span class="ttl">⚠️ この欄はいつも出るわけではありません</span>
+  次の 2 つが<strong>両方</strong>そろったときだけ出ます (<code>checkOrderGroupFormVisible</code>)。
+  <ol>
+    <li>「設定 &gt; 案件グループの設定」で<strong>「案件グループ名を利用する」が ON</strong></li>
+    <li>「設定 &gt; ステータスごとの設定 &gt; 表示設定」で<strong>「案件グループでまとめて表示」のステータスが 1 つ以上ある</strong></li>
+  </ol>
+  どちらかが欠けていると欄そのものが無いので、この不具合は起きません (QA で「再現しない」となる典型的な理由です)。
+</div>
+
+<p>欄の中身は「入力できるプルダウン」です。2 通りの使い方があります。</p>
+
+<div class="mock-row">
+  <div class="mock">
+    <div class="step">① 顧客がまだ未選択のとき</div>
+    <div class="field"><div class="lbl">案件グループ名</div><div class="box hl-focus">12345 <span>▾</span></div>
+      <div class="dropdown">
+        <div class="hint">顧客を選択すると既存のグループを選べます</div>
+        <div class="create">＋ グループ「12345」を新規作成</div>
+      </div>
+    </div>
+    <div class="field"><div class="lbl">顧客名</div><div class="box placeholder">（未選択） <span>▾</span></div></div>
+    <p style="font-size:12px;margin:6px 0 0">できるのは<strong>新しい名前の入力だけ</strong>。</p>
+  </div>
+  <div class="mock">
+    <div class="step">② 顧客「A社」を選んだあと</div>
+    <div class="field"><div class="lbl">案件グループ名</div><div class="box hl-focus">フラ <span>▾</span></div>
+      <div class="dropdown">
+        <div>A社 フランジ一式 <span style="float:right;color:#999">20260825-9</span></div>
+        <div>A社 フランジ追加 <span style="float:right;color:#999">20260901-3</span></div>
+        <div class="create">＋ グループ「フラ」を新規作成</div>
+      </div>
+    </div>
+    <div class="field"><div class="lbl">顧客名</div><div class="box">A社 <span>▾</span></div></div>
+    <p style="font-size:12px;margin:6px 0 0">候補は <strong>A社のグループだけ</strong> (1 グループ = 1 顧客を守るため)。</p>
+  </div>
+</div>
+
+<p>②で候補が A社のグループに絞られているのは、コードでは次の部分です。顧客が決まるまで API の問い合わせ自体をしません。</p>
+
+<pre><code><span class="cm">// OrderGroupCreatableSelectRHF.tsx (抜粋)</span>
+const { data: orderGroupsData } = useOrderGroupsQuery(
+  { query: { per_page, client_id: clientId, like_number_or_name: keyword } },
+  { enabled: clientId != null }   <span class="cm">// 顧客が未選択なら問い合わせない</span>
+);</code></pre>
+
+<p>ここまでで、この不具合を理解するのに一番大事な事実が出そろいました。</p>
+
+<div class="callout">
+  <span class="ttl">🔑 大事な事実</span>
+  顧客を選ぶ前に入力できるのは、<strong>新しいグループ名だけ</strong>です。既存グループは、顧客を選ぶまで候補に出ません。そしてモーダルは<strong>グループ名 → 顧客名</strong>の順に並んでいます。上から順に埋めていく人は、必ず「新しい名前を入れてから顧客を選ぶ」ことになります。
+</div>
+
+<h3>フォームの中で、選択値はどんな形をしているか</h3>
+
+<p>react-hook-form のフォーム値 <code>data.order_group</code> は、次の 3 つの形のどれかです (<code>orderGroupSelectionSchema</code>)。</p>
+
+<div class="tbl-wrap">
+<table>
+  <tr><th>形</th><th>意味</th><th>例</th></tr>
+  <tr><td><code>null</code></td><td>未選択</td><td><code>null</code></td></tr>
+  <tr><td><code>{ id, number, name? }</code></td><td><strong>既存グループ</strong>を選んだ</td><td><code>{ id: 9, number: "20260825-9", name: "A社 フランジ一式" }</code></td></tr>
+  <tr><td><code>{ name }</code></td><td><strong>新しい名前</strong>を入力した (保存時に新規作成)</td><td><code>{ name: "12345" }</code></td></tr>
+</table>
+</div>
+
+<p>2 つを見分けるのは <strong><code>id</code> があるかどうか</strong>です。コード中の <code>'id' in selection</code> という判定はこの意味です。</p>
+
+<h3 id="bg-be">2-3. 保存すると BE で何が起きるか</h3>
+
+<p>「案件を作成」を押すと、フォーム値は <code>convertOrderGroupSelectionToRequest</code> で API の形に変換され、BE に送られます。</p>
+
+<div class="flow">
+  <div class="node fe">
+    <div class="nt">FE フォーム値</div>
+    <code>order_group:
+  { name: "12345" }
+client_name: A社 (id 5)</code>
+  </div>
+  <div class="arr">→</div>
+  <div class="node api">
+    <div class="nt">POST /api/drawing_files</div>
+    <code>order_group:
+  { name: "12345" }
+client_id: 5</code>
+  </div>
+  <div class="arr">→</div>
+  <div class="node be">
+    <div class="nt">BE</div>
+    ① 顧客 null の新しいグループ「12345」を作る<br>
+    ② 案件 (顧客 A社) をそこへ入れる<br>
+    ③ グループの顧客を案件の顧客 (A社) で埋める
+  </div>
+</div>
+
+<div class="flow">
+  <div class="node fe">
+    <div class="nt">FE フォーム値</div>
+    <code>order_group:
+  { id: 9, number: "…" }
+client_name: B社 (id 7)</code>
+  </div>
+  <div class="arr">→</div>
+  <div class="node api">
+    <div class="nt">POST /api/drawing_files</div>
+    <code>order_group: { id: 9 }
+client_id: 7</code>
+  </div>
+  <div class="arr">→</div>
+  <div class="node be">
+    <div class="nt">BE</div>
+    グループ #9 の顧客は A社、案件の顧客は B社<br>
+    → 両方に顧客があって食い違うので <strong class="ng">422 client_conflict</strong><br>
+    <span style="font-size:12px">「案件グループには 1 つの顧客しか設定できないため…」</span>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="ttl">🔑 BE から見た非対称性</span>
+  <ul style="margin:4px 0">
+    <li><strong>新しい名前 <code>{ name }</code></strong>: まだ誰のものでもありません。顧客が何であっても、保存時にその案件の顧客のグループになります。<strong>顧客が変わっても壊れようがありません。</strong></li>
+    <li><strong>既存グループ <code>{ id }</code></strong>: すでに特定の顧客のものです。違う顧客の案件を入れようとすると 422 で弾かれます。</li>
+  </ul>
+  この PR の直し方は、ほぼこの非対称性から導けます。
+</div>
+
+<!-- ===================================================== -->
+<h2 id="intuition">3. 直感 — 何が壊れていて、どう直したか</h2>
+
+<h3 id="int-bug">3-1. 不具合の正体</h3>
+
+<p>報告動画 (デモアカウント) の手順を再現すると、次のようになります。</p>
+
+<div class="mock-row">
+  <div class="mock">
+    <div class="step">手順 1: 新しい名前を入力</div>
+    <div class="field"><div class="lbl">案件グループ名</div><div class="box hl-focus">12345 <span>▾</span></div>
+      <div class="dropdown"><div class="create sel">＋ グループ「12345」を新規作成</div></div>
+    </div>
+    <div class="field"><div class="lbl">顧客名</div><div class="box placeholder">（未選択） <span>▾</span></div></div>
+  </div>
+  <div class="arrow-h">→</div>
+  <div class="mock">
+    <div class="step">手順 2: 顧客を選ぶ</div>
+    <div class="field"><div class="lbl">案件グループ名</div><div class="box">12345 <span class="tag">{ name }</span></div></div>
+    <div class="field"><div class="lbl">顧客名</div><div class="box hl-focus">▾</div>
+      <div class="dropdown"><div class="sel">株式会社ズメーン製作所</div><div>FactBase.inc</div></div>
+    </div>
+  </div>
+  <div class="arrow-h">→</div>
+  <div class="mock">
+    <div class="step">手順 3: 修正前の結果</div>
+    <div class="field"><div class="lbl">案件グループ名</div><div class="box placeholder hl-bad">案件グループ <span>▾</span></div></div>
+    <div class="field"><div class="lbl">顧客名</div><div class="box">株式会社ズメーン製作所 <span>×</span></div></div>
+    <p style="font-size:12px;margin:6px 0 0" class="ng">入力した 12345 が消えた</p>
+  </div>
+</div>
+
+<p>原因は、顧客名セレクトに付いていた、この 1 行です (#4212 で入ったもの)。</p>
+
+<pre><code><span class="cm">// NewOrderDrawingBasicItemsForm.tsx (修正前)</span>
+onChange={() =&gt; setValue('data.order_group', null)}
+onCreationSuccess={(newClient) =&gt; {
+  setValue('data.drawing_basic_items.client_name', { label: newClient.name, value: newClient.id });
+  <span class="cm">// 1 グループ = 1 顧客のため、顧客が変わったらグループ選択は捨てる</span>
+  setValue('data.order_group', null);
+}}</code></pre>
+
+<p>コメントにあるとおり、狙いは「1 グループ = 1 顧客」を守ることでした。A社のグループ #9 を選んだあとで顧客を B社に変えたら、#9 を残しておくと保存時に 422 になります。だから外す。これ自体は正しい考えです。</p>
+
+<p>問題は、<strong>外す相手を区別していなかった</strong>ことです。前の節で見たとおり、新しい名前 <code>{ name }</code> はまだどの顧客のものでもないので、顧客が変わっても守るべきルールに触れません。それを既存グループと同じように捨てていました。そしてモーダルの並び順のせいで、上から入力するユーザーは毎回この罠を踏みます。</p>
+
+<div class="callout bad">
+  <span class="ttl">🐛 一言でいうと</span>
+  「既存グループを守るための処理」が、「新しいグループ名」まで巻き込んで消していた。
+</div>
+
+<h3 id="int-ticket">3-2. チケットの修正方針では直らない</h3>
+
+<p>開発チケットには、次の修正方針が書かれていました (Slack の調査 bot の提案を転記したもの)。</p>
+
+<blockquote class="callout warn" style="margin-left:0">
+  onChange で顧客の変更前後の値を比較し、実際に顧客が変わった場合だけグループをリセットする。
+</blockquote>
+
+<p>一見もっともらしいのですが、報告の手順に当てはめてみると直りません。</p>
+
+<div class="tbl-wrap">
+<table>
+  <tr><th></th><th>変更前の顧客</th><th>変更後の顧客</th><th>「変わった」か</th><th>チケット方針の結果</th></tr>
+  <tr><td>報告の手順</td><td>未選択 (<code>undefined</code>)</td><td>株式会社ズメーン製作所</td><td>変わった</td><td class="ng">リセット → 12345 は消えたまま</td></tr>
+</table>
+</div>
+
+<p>「未選択 → 選択」も立派な変化です。この方針が直せるのは「同じ顧客を選び直したら消えた」というケースだけで、報告されたケースはそのまま残ります。判定の軸が間違っているのです。見るべきなのは<strong>顧客が変わったかどうか</strong>ではなく、<strong>いま欄に入っているのがどちらの種類か</strong>です。</p>
+
+<h3 id="int-rule">3-3. 新しい判定: グループの種類で分ける</h3>
+
+<p>PR が採用した判定は、分かれ道で書くと次のとおりです。</p>
+
+<div class="tree">
+  <div class="q">顧客名が変わった (選んだ・変えた・× で消した・新規作成した)。案件グループ名の欄には何が入っている？</div>
+  <div class="branches">
+    <div class="br">
+      <div class="edge">空 (<code>null</code>)</div>
+      <div class="leaf keep">何もしない</div>
+    </div>
+    <div class="br">
+      <div class="edge">新しい名前 <code>{ name }</code></div>
+      <div class="leaf keep">残す — まだ誰のものでもない</div>
+    </div>
+    <div class="br">
+      <div class="edge">既存グループ <code>{ id, … }</code></div>
+      <div class="q" style="margin-top:0">そのグループを選んだ時点の顧客と、変更後の顧客は同じ？</div>
+      <div class="branches" style="margin-left:8px">
+        <div class="br"><div class="edge">同じ</div><div class="leaf keep">残す</div></div>
+        <div class="br"><div class="edge">違う (未選択を含む)</div><div class="leaf clear">外す</div></div>
+        <div class="br"><div class="edge">分からない</div><div class="leaf clear">外す (安全側)</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p>具体例で並べると、修正前と修正後の違いは 3 行に集約されます。</p>
+
+<div class="tbl-wrap">
+<table>
+  <tr><th>案件グループ名の欄</th><th>顧客名の操作</th><th>修正前</th><th>修正後</th></tr>
+  <tr><td>新しい名前 <code>12345</code></td><td>選ぶ / 別の顧客に変える / × で消す / 顧客を新規作成</td><td class="ng">空になる</td><td class="ok">残る</td></tr>
+  <tr><td>既存グループ #9 (A社で選択)</td><td>A社を選び直す</td><td class="ng">空になる</td><td class="ok">残る</td></tr>
+  <tr><td>既存グループ #9 (A社で選択)</td><td>B社に変える / × で消す / 顧客を新規作成</td><td>空になる</td><td>空になる (変更なし)</td></tr>
+</table>
+</div>
+
+<div class="callout warn">
+  <span class="ttl">🤔 「既存グループ → 顧客を × で消す」はなぜ外すのか</span>
+  BE の決まりでは、顧客 null の案件はどのグループにも入れるので、残しても 422 にはなりません。それでも外すのは、この欄が「顧客が未選択なら既存グループは選べない」作りだからです。顧客を消したのに既存グループだけが残っていると、ユーザーが自分では作れない状態が画面に出てしまいます。修正前もこの場合は外していたので、挙動は変わりません。
+</div>
+
+<div class="callout">
+  <span class="ttl">📝 残した新しい名前は、既存グループと突き合わせません</span>
+  「12345」を入れてから、たまたま「12345」という既存グループを持つ顧客を選んでも、保存時には<strong>新規作成</strong>になります (BE はグループ名の重複を禁止していません)。顧客を先に選んでから「12345」を新規作成した場合と同じ結果なので、今回は変えていません。
+</div>
+
+<h3 id="int-clientid">3-4. 「選んだ時点の顧客」を覚えさせる</h3>
+
+<p>残る問いは、「既存グループを<em>選んだ時点</em>の顧客」をどこから持ってくるかです。素直に考えると「顧客名の onChange の中で、変更前の顧客をフォームから読めばいい」となりますが、そうはいきません。顧客名セレクトの土台 <code>CreatableSingleSelectRHF</code> は、呼ぶ順番が決まっているからです。</p>
+
+<ol class="timeline">
+  <li>ユーザーが顧客名で「B社」をクリックする</li>
+  <li><code>field.onChange(B社)</code> — react-hook-form のフォーム値が <strong>B社に書き換わる</strong></li>
+  <li class="warn">呼び出し側の <code>onChange</code> が呼ばれる — ここで <code>getValues('…client_name')</code> を読んでも、返ってくるのは<strong>もう B社</strong>。変更前の A社はどこにも残っていない</li>
+</ol>
+
+<pre><code><span class="cm">// CreatableSingleSelectRHF.tsx L81-82</span>
+onChange={(e, meta) =&gt; {
+  field.onChange(e, meta);          <span class="cm">// ① 先にフォーム値を更新</span>
+  if (onChange) onChange(e, meta);  <span class="cm">// ② そのあと呼び出し側へ</span>
+}}</code></pre>
+
+<p>最初の実装は、<code>useWatch</code> で購読している「直前の描画時点の顧客」を変更前の値として使っていました。動きはしますが、「描画のタイミングの都合でたまたま古い値が見えている」ことに正しさが依存していて、コードを読んでもそれで正しい理由が分かりません。セルフレビューでこの点を指摘され、次の形に作り直しました。</p>
+
+<div class="callout good">
+  <span class="ttl">✅ 採用した形: 選択値そのものに持ち主を書いておく</span>
+  既存グループを選んだ瞬間に、その選択値に <code>client_id</code> (そのとき選ばれていた顧客) を書き込んでおきます。候補は選択中の顧客で絞り込んで取っているので、候補から選んだグループの持ち主は、その時点の顧客と必ず一致します。<br>
+  こうしておけば、あとで顧客が変わったときは<strong>「選択値の <code>client_id</code>」と「変更後の顧客」を比べるだけ</strong>で判定できます。変更前の顧客も描画のタイミングも要りません。
+</div>
+
+<div class="flow">
+  <div class="node fe">
+    <div class="nt">① 顧客 A社 (id 1) で既存グループ #9 を選ぶ</div>
+    <code>order_group: {
+  id: 9,
+  number: "20260825-9",
+  client_id: 1   ← 追加
+}</code>
+  </div>
+  <div class="arr">→</div>
+  <div class="node fe">
+    <div class="nt">② 顧客を B社 (id 2) に変える</div>
+    判定: <code>client_id 1 !== 2</code><br>
+    → <strong class="ng">外す</strong> (<code>null</code>)
+  </div>
+  <div class="arr">→</div>
+  <div class="node api">
+    <div class="nt">(もし A社のまま保存したら)</div>
+    <code>order_group: { id: 9 }</code><br>
+    <span style="font-size:12px"><code>client_id</code> は送らない</span>
+  </div>
+</div>
+
+<p><code>client_id</code> は FE の中だけで使う目印で、API には出ません。送信データは今までどおり <code>convertOrderGroupSelectionToRequest</code> が <code>{ id }</code> か <code>{ name }</code> だけに絞ります。BE から見ると、この PR の前後で何も変わりません。</p>
+
+<!-- ===================================================== -->
+<h2 id="code">4. コード — 変更を順に読む</h2>
+
+<p>プロダクトコードの変更は 5 ファイル、+113 −25 行です。PR 本文のおすすめどおり、判定の中心から外側へ読んでいきます。</p>
+
+<h3>4-1. 判定の純関数 <code>checkShouldClearOrderGroupOnClientChange</code> (新規)</h3>
+
+<p>3-3 の分かれ道を、そのままコードにしたものです。React にも react-hook-form にも依存しないので、単体で 7 件のテストがあります。</p>
+
+<pre><code><span class="cm">// src/functions/checkShouldClearOrderGroupOnClientChange.ts</span>
+export const checkShouldClearOrderGroupOnClientChange = ({
+  orderGroup,
+  nextClientId,
+}: {
+  orderGroup: OrderGroupSelection;
+  nextClientId: Client['id'] | undefined;
+}): boolean =&gt; {
+  <span class="cm">// 未選択、または入力した名前で新規作成するグループ (id を持たない) は、どの顧客にも属していない</span>
+  if (orderGroup == null || !('id' in orderGroup)) return false;
+
+  <span class="cm">// 選んだ時の顧客が分からない既存グループは、別の顧客のものかもしれないので外す</span>
+  if (orderGroup.client_id == null) return true;
+
+  return orderGroup.client_id !== nextClientId;
+};</code></pre>
+
+<p>3 行の <code>if</code> / <code>return</code> が、分かれ道の 3 本の枝にそのまま対応しています。<code>nextClientId</code> が <code>undefined</code> (顧客を × で消した) なら、最後の比較は必ず「違う」になるので、既存グループは外れます。</p>
+
+<h3>4-2. 2 つのフォームの配線</h3>
+
+<p>同じ欠陥のコードが 2 か所にありました。案件一覧の「新規案件を作成」モーダル (<code>NewOrderDrawingBasicItemsForm.tsx</code>) と、図面一覧の「新規図面を追加」モーダルで「新規案件を同時に作成」を ON にしたとき (<code>DrawingBasicItemsForm.tsx</code>) です。どちらも同じ形に直しています。</p>
+
+<pre><code><span class="add">+ const clearOrderGroupOfAnotherClient = useCallback(</span>
+<span class="add">+   (nextClientId: Client['id'] | undefined) =&gt; {</span>
+<span class="add">+     const shouldClearOrderGroup = checkShouldClearOrderGroupOnClientChange({</span>
+<span class="add">+       orderGroup: getValues('data.order_group'),</span>
+<span class="add">+       nextClientId,</span>
+<span class="add">+     });</span>
+<span class="add">+     if (shouldClearOrderGroup) setValue('data.order_group', null);</span>
+<span class="add">+   },</span>
+<span class="add">+   [getValues, setValue]</span>
+<span class="add">+ );</span>
+<span class="add">+</span>
+<span class="add">+ const handleClientChange = useCallback(</span>
+<span class="add">+   (clientOption: ClientSelectOption | null) =&gt;</span>
+<span class="add">+     clearOrderGroupOfAnotherClient(clientOption?.value),</span>
+<span class="add">+   [clearOrderGroupOfAnotherClient]</span>
+<span class="add">+ );</span>
+<span class="add">+</span>
+<span class="add">+ const handleClientCreationSuccess = useCallback(</span>
+<span class="add">+   (newClient: Pick&lt;Client, 'id' | 'name'&gt;) =&gt; {</span>
+<span class="add">+     setValue('data.drawing_basic_items.client_name', { label: newClient.name, value: newClient.id });</span>
+<span class="add">+     clearOrderGroupOfAnotherClient(newClient.id);</span>
+<span class="add">+   },</span>
+<span class="add">+   [setValue, clearOrderGroupOfAnotherClient]</span>
+<span class="add">+ );</span>
+
+  &lt;CreatableSingleSelectRHFForClient
+<span class="del">-   onCreationSuccess={(newClient) =&gt; { …; setValue('data.order_group', null); }}</span>
+<span class="del">-   onChange={() =&gt; setValue('data.order_group', null)}</span>
+<span class="add">+   onCreationSuccess={handleClientCreationSuccess}</span>
+<span class="add">+   onChange={handleClientChange}</span>
+  /&gt;</code></pre>
+
+<div class="callout warn">
+  <span class="ttl">⚠️ 入口は 2 つある</span>
+  顧客名セレクトで「顧客を新規作成」を選んだときは、<code>onChange</code> を通らず <code>onCreationSuccess</code> だけが呼ばれます。<code>onChange</code> だけを直すと、「新しい顧客を作ったら、入力したグループ名が消える」経路が残ってしまいます。だから 2 つの入口の両方を、同じ <code>clearOrderGroupOfAnotherClient</code> に通しています。新しく作った顧客はまだグループを持たないので、既存グループは (<code>client_id</code> が違うので) 外れ、新しい名前は残ります。
+</div>
+
+<p>この約 25 行の配線を共通の hook にまとめる案も検討されましたが、見送られました。2 つのフォームはスキーマ (型) が違い、react-hook-form の <code>getValues</code> / <code>setValue</code> の型が互いに代入できないため、<code>as</code> なしでは書けないからです (一時ファイルの tsc でエラー 9 件)。判定そのものは純関数 1 か所で共有し、片方だけの直し忘れは各フォームの spec (10 件ずつ) で検知する、という分担にしています。</p>
+
+<h3>4-3. セレクトが <code>client_id</code> を書き込む</h3>
+
+<p>3-4 で説明した「選んだ時点の顧客を覚えさせる」部分です。変更は 1 行と依存配列だけです。</p>
+
+<pre><code><span class="cm">// OrderGroupCreatableSelectRHF.tsx handleChange (既存グループを選んだとき)</span>
+const nextSelection: OrderGroupSelection = {
+  id: orderGroup.id,
+  number: orderGroup.number,
+  ...(orderGroup.name != null &amp;&amp; { name: orderGroup.name }),
+<span class="add">+ ...(clientId != null &amp;&amp; { client_id: clientId }),</span>
+};
+field.onChange(nextSelection);
+<span class="del">- [field, orderGroupByValue]</span>
+<span class="add">+ [field, orderGroupByValue, clientId]</span></code></pre>
+
+<p><code>clientId</code> は、このセレクトに親から渡されている「いま選ばれている顧客」です。候補の問い合わせにも同じ値を使っているので、選んだグループの持ち主と一致します。API の <code>orderGroup.client?.id</code> から取る案もありましたが、API の型では <code>client</code> が optional なので、確実に値がある prop の方を使っています。</p>
+
+<h3>4-4. スキーマに <code>client_id</code> を足す</h3>
+
+<pre><code><span class="cm">// src/zod_schema/orderGroupSelectionSchema.ts</span>
+z.union([
+  <span class="cm">// 既存グループ指定</span>
+  z.object({
+    id: z.number(),
+    number: z.string(),
+    name: z.string().optional(),
+<span class="add">+   // このグループの顧客。選択肢は選択中の顧客で絞り込んで取得するので、選んだ時点の顧客を入れる</span>
+<span class="add">+   client_id: z.number().optional(),</span>
+  }),
+  <span class="cm">// 入力した名前で新規作成</span>
+  z.object({ name: z.string().min(1).max(ORDER_GROUP_NAME_MAX_LENGTH) }),
+]).nullable();</code></pre>
+
+<div class="callout">
+  <span class="ttl">💡 なぜ必須ではなく optional なのか</span>
+  この union には「どちらの形か」を示す判別キーがありません。もし <code>client_id</code> を必須にすると、<code>client_id</code> が欠けた既存グループの値 (<code>{ id, number, name }</code>) は 1 つ目の形に合わなくなります。すると zod は 2 つ目を試し、<code>name</code> があるので<strong>「新しい名前の新規作成」として通してしまいます</strong>。既存グループのつもりが新規作成に化けるより、optional にして「<code>client_id</code> が無い既存グループは外す」(4-1 の 2 本目の <code>if</code>) で安全側に倒す方を選んでいます。
+</div>
+
+<h3>4-5. 変わっていないもの</h3>
+<ul>
+  <li><strong>API と BE</strong>: 送信データは <code>{ id }</code> か <code>{ name }</code> のまま。<code>client_id</code> が送信データに出ないことを <code>convertOrderGroupSelectionToRequest.spec.ts</code> で固定しています。</li>
+  <li><strong>欄の並び順</strong>: 案件グループ名が顧客名より上のまま。要件定義に「左カラムの一番上(モーダル内の最初の入力フォーム)に配置する」とあるためです。チケットの補足にあった並び順の見直しは仕様変更なので、PdM の判断事項として残っています。</li>
+  <li><strong>案件グループの移動モーダル</strong>: 別のピッカー (<code>OrderGroupPickerModal</code>) を使っているので影響しません。</li>
+</ul>
+
+<h3>4-6. テスト (差分の 89%)</h3>
+<div class="tbl-wrap">
+<table>
+  <tr><th>spec</th><th>件数</th><th>何を守っているか</th></tr>
+  <tr><td><code>checkShouldClearOrderGroupOnClientChange.spec.ts</code> (新規)</td><td>7</td><td>分かれ道のすべての枝</td></tr>
+  <tr><td><code>NewOrderDrawingBasicItemsForm.spec.tsx</code> (新規)</td><td>10</td><td rowspan="2">実際に顧客名セレクトを操作して、案件グループ名の欄が画面に残る / 空になることを確認。修正前のコードに戻すと、「残るべきものが残る」6 件が赤になり、「外すべきものを外す」4 件は緑のまま (外し忘れを防ぐ番人なので、修正の前後とも緑が正しい)</td></tr>
+  <tr><td><code>DrawingBasicItemsForm.spec.tsx</code> (新規)</td><td>10</td></tr>
+  <tr><td><code>OrderGroupCreatableSelectRHF.spec.tsx</code></td><td>更新</td><td>既存グループの選択値に <code>client_id</code> が入る</td></tr>
+  <tr><td><code>convertOrderGroupSelectionToRequest.spec.ts</code></td><td>更新</td><td><code>client_id</code> が API に出ない</td></tr>
+</table>
+</div>
+
+<p>さらに、「セレクトが常に同じ <code>client_id</code> を書いてしまう」壊れ方も、わざとコードを壊して試しています。このときは「顧客を切り替えたあとで選び直した既存グループも、元の顧客に戻すと外れる」というテストだけが赤になり、この壊れ方も検知できることが確かめられています。</p>
+
+<!-- ===================================================== -->
+<h2 id="quiz">5. クイズ (5 問)</h2>
+<p>選択肢をクリックすると、正誤と解説が出ます。スコア: <span id="score">0 / 5</span></p>
+
+<div class="quiz" data-answer="1">
+  <div class="qn">Q1. 顧客が未選択のとき、案件グループ名の欄でユーザーができることは？</div>
+  <button class="opt">A. 会社のすべての既存グループから選ぶことができる</button>
+  <button class="opt">B. 新しいグループ名を入力して「新規作成」を選ぶことだけができる</button>
+  <button class="opt">C. 何もできない (欄が無効になっている)</button>
+  <button class="opt">D. 直前に使った顧客のグループから選ぶことができる</button>
+  <div class="fb" data-good="正解です。候補の問い合わせは顧客が決まるまで行われず (enabled: clientId != null)、「顧客を選択すると既存のグループを選べます」だけが出ます。だから、顧客より先に欄に入るのは必ず新しい名前 { name } で、それが顧客を選んだ瞬間に消えていたのが今回の不具合です。" data-bad="違います。既存グループの候補は選択中の顧客で絞り込んで取得するので、顧客が未選択の間は候補が出ません。できるのは新しい名前の入力だけです。"></div>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="qn">Q2. チケットの修正方針「顧客の変更前後を比べ、変わったときだけリセットする」で報告の不具合が直らないのはなぜ？</div>
+  <button class="opt">A. react-select は同じ顧客を選び直しても onChange を呼ばないから</button>
+  <button class="opt">B. 変更前後を比べる処理が BE にしか書けないから</button>
+  <button class="opt">C. 報告の手順は「未選択 → 顧客を選択」で、これも「変わった」に当たるから</button>
+  <button class="opt">D. 顧客の新規作成では onChange が呼ばれないから</button>
+  <div class="fb" data-good="正解です。未選択 (undefined) から特定の顧客への変化も「変わった」なので、この方針でもリセットされます。軸を「顧客が変わったか」から「欄に入っているのが既存グループか新しい名前か」に変える必要がありました。" data-bad="違います。D は事実ですが (だから onCreationSuccess も直しています)、直らない理由そのものではありません。報告の手順は「未選択 → 選択」で、これも「変わった」と判定されるのが理由です。"></div>
+</div>
+
+<div class="quiz" data-answer="3">
+  <div class="qn">Q3. 顧客 A社を選び、A社の既存グループ #9 を選択。次に顧客を B社に変え、B社の既存グループ #20 を選択。最後に顧客を A社に戻した。案件グループ名の欄はどうなる？</div>
+  <button class="opt">A. #9 に戻る</button>
+  <button class="opt">B. #20 のまま残る (同じグループを選び直したわけではないので何もしない)</button>
+  <button class="opt">C. 新しい名前として「#20 の名前」が残る</button>
+  <button class="opt">D. 空になる</button>
+  <div class="fb" data-good="正解です。#20 を選んだ時点の顧客は B社なので、選択値は { id: 20, …, client_id: B社 } です。A社に戻すと client_id (B社) !== 変更後 (A社) なので外れます。判定が「直前の顧客」ではなく「選んだ時点の顧客」に基づいていることが効いています (PR の番人テストもこのケースです)。" data-bad="違います。#9 は B社に変えた時点で外れていて、フォームのどこにも覚えられていません。いま欄にあるのは #20 で、その client_id は B社です。A社に戻すと食い違うので外れ、欄は空になります。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="qn">Q4. 既存グループの「持ち主」を、顧客名の onChange の中で getValues から変更前の顧客を読んで判定しなかった理由は？</div>
+  <button class="opt">A. onChange が呼ばれる時点では、field.onChange がすでにフォーム値を変更後の顧客に書き換えているから</button>
+  <button class="opt">B. getValues はサーバーへの問い合わせが発生して遅いから</button>
+  <button class="opt">C. getValues はプロジェクト規約で使用禁止だから</button>
+  <button class="opt">D. 顧客名はフォーム値ではなく localStorage に入っているから</button>
+  <div class="fb" data-good="正解です。CreatableSingleSelectRHF は field.onChange → 呼び出し側の onChange の順に呼ぶので、ハンドラの中ではもう変更前の顧客が読めません。useWatch の描画時の値で代用すると動きはしますが、正しさがタイミングに依存して読み取れないため、選択値に client_id を持たせる形に作り直しました。" data-bad="違います。理由は呼び出し順です。field.onChange が先に走り、フォーム値はすでに変更後の顧客になっています。"></div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="qn">Q5. 新しい名前「12345」を入力 → 顧客 A社を選ぶ → 保存。このときの API リクエストと BE の動きとして正しいのは？</div>
+  <button class="opt">A. order_group: { name: "12345", client_id: A社 } が送られ、BE はその client_id でグループを作る</button>
+  <button class="opt">B. order_group: { name: "12345" } が送られ、BE は新しいグループを作って案件を入れ、グループの顧客は案件の顧客 (A社) で決まる</button>
+  <button class="opt">C. A社に同名のグループがあれば、BE はそのグループに合流させる</button>
+  <button class="opt">D. 顧客を選んだ時点で「12345」は消えるので、グループ未指定で送られる</button>
+  <div class="fb" data-good="正解です。client_id は FE の中だけの目印で、既存グループの選択値にしか付かず、API にも出ません (convertOrderGroupSelectionToRequest が { id } / { name } に絞る)。新しいグループの顧客は、BE が案件の顧客から埋めます。同名の既存グループとは突き合わせないので C も誤りです。" data-bad="違います。送られるのは { name: &quot;12345&quot; } だけです。client_id は API に出ず、同名の既存グループとの突き合わせもしません。BE が新しいグループを作り、その顧客を案件の顧客 (A社) で埋めます。"></div>
+</div>
+
+<div class="callout good" style="margin-top:40px">
+  <span class="ttl">📚 全体をもう一度</span>
+  案件グループには「既存グループ <code>{ id }</code>」と「新しい名前 <code>{ name }</code>」の 2 種類があり、1 グループ = 1 顧客のルールで縛られるのは前者だけです。修正前は両者を区別せずに顧客の変更で捨てていました。修正後は、前者だけを「選んだ時点の顧客 (<code>client_id</code>)」と比べて外します。BE との約束は何も変わっていません。
+</div>
+
+</main>
+
+<script>
+  (function () {
+    var quizzes = document.querySelectorAll('.quiz');
+    var answered = 0;
+    var correct = 0;
+    var scoreEl = document.getElementById('score');
+    quizzes.forEach(function (quiz) {
+      var answer = Number(quiz.dataset.answer);
+      var buttons = quiz.querySelectorAll('button.opt');
+      var fb = quiz.querySelector('.fb');
+      var done = false;
+      buttons.forEach(function (btn, index) {
+        btn.addEventListener('click', function () {
+          var isCorrect = index === answer;
+          buttons.forEach(function (b) { b.classList.remove('wrong'); });
+          if (isCorrect) {
+            btn.classList.add('correct');
+            fb.className = 'fb show good';
+            fb.textContent = '✅ ' + fb.dataset.good;
+          } else {
+            btn.classList.add('wrong');
+            fb.className = 'fb show bad';
+            fb.textContent = '❌ ' + fb.dataset.bad;
+          }
+          // 最初の回答だけを採点する
+          if (!done) {
+            done = true;
+            answered += 1;
+            if (isCorrect) correct += 1;
+            scoreEl.textContent = correct + ' / ' + quizzes.length + (answered === quizzes.length ? ' (完了)' : '');
+          }
+        });
+      });
+    });
+  })();
+</script>
+</body>
+</html>
