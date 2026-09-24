@@ -9,3 +9,9 @@ AGENTS.md
 .impeccable/build/pending.json
 .impeccable/questions/
 .impeccable/review/
+
+# Wrangler local dev state
+.wrangler/
+
+# Local secrets such as the Cloudflare API token
+.env

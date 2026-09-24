@@ -439,7 +439,7 @@ function renderArchiveStatus() {
     "<span><strong>" +
     String(months.size).padStart(3, "0") +
     "</strong> months indexed</span>" +
-    "<span>GitHub Pages · HTML</span>";
+    "<span>Cloudflare · HTML</span>";
   elements.categoryTotal.textContent = String(
     Math.max(0, state.categories.length - 1),
   ).padStart(2, "0");

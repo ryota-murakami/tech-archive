@@ -1,0 +1,12 @@
+{
+  "name": "tech-archive",
+  "compatibility_date": "2026-09-01",
+  // Assets-only Worker: every request is answered from site/ without Worker code.
+  "assets": {
+    "directory": "./site"
+  },
+  // workers.dev is the only public hostname; Cloudflare Access guards it.
+  "workers_dev": true,
+  // Per-version preview hostnames would be extra entry points to keep behind Access.
+  "preview_urls": false
+}
