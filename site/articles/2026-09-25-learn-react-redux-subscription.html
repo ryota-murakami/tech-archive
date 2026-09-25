@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="React Redux の Subscription は、ストアの通知をコンポーネントツリーの親から子へ順番を守って配り直し、stale props と zombie children を避ける中継網であるという解説。" />
+<meta name="archive:title" content="React Redux の Subscription とは何か" />
+<meta name="archive:published" content="2026-09-25" />
+<meta name="archive:type" content="Explainer" />
+<meta name="archive:source" content="react-redux v9.3.0 · src/utils/Subscription.ts" />
+<meta name="archive:category" content="React Redux" />
+<meta name="archive:category" content="Redux" />
+<meta name="archive:category" content="React" />
+<meta name="archive:reading-minutes" content="14" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="parentSub.addNestedSub(handleChangeWrapper) // else store.subscribe" />
+<title>React Redux の Subscription とは何か</title>
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --fg: #1f2328;
+    --muted: #5f6670;
+    --line: #e2ded5;
+    --card: #ffffff;
+    --accent: #7a4bd6;
+    --accent-soft: #efe8fb;
+    --store: #d9480f;
+    --store-soft: #fff0e6;
+    --root: #1c7ed6;
+    --root-soft: #e7f2fd;
+    --conn: #2b8a3e;
+    --conn-soft: #e9f7ec;
+    --hook: #c2255c;
+    --hook-soft: #fdecf2;
+    --warn: #b7791f;
+    --warn-soft: #fff7e0;
+    --bad: #c92a2a;
+    --bad-soft: #fdecec;
+    --ok: #2b8a3e;
+    --ok-soft: #e9f7ec;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif;
+    line-height: 1.85;
+    font-size: 16.5px;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 120px; }
+  header.hero { padding: 24px 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+  header.hero .kicker { color: var(--accent); font-weight: 700; letter-spacing: .06em; font-size: 13px; }
+  h1 { font-size: 34px; line-height: 1.3; margin: 8px 0 12px; }
+  h2 { font-size: 25px; margin: 64px 0 12px; padding-top: 8px; border-top: 3px solid var(--fg); }
+  h3 { font-size: 19px; margin: 36px 0 8px; }
+  p { margin: 12px 0; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: .88em; background: #f1eee8; padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre code { overflow-wrap: normal; }
+  pre {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.6;
+    background: #1e1e24;
+    color: #e7e5ee;
+    padding: 14px 16px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre .c { color: #8b93a1; }
+  pre .k { color: #c9a4ff; }
+  pre .s { color: #9fe0a8; }
+  pre .hl { background: rgba(255, 214, 102, .18); display: inline-block; width: 100%; }
+  .src { font-size: 12.5px; color: var(--muted); margin: -6px 0 16px; font-family: var(--mono); }
+  .lede { font-size: 18px; color: #333a44; }
+
+  nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 20px; margin: 20px 0 8px; }
+  nav.toc strong { font-size: 14px; color: var(--muted); }
+  nav.toc ol { margin: 6px 0 0; padding-left: 22px; }
+  nav.toc li { margin: 2px 0; }
+
+  .callout { border-left: 5px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 8px; margin: 18px 0; }
+  .callout .t { font-weight: 800; display: block; margin-bottom: 2px; }
+  .callout.def { border-color: var(--root); background: var(--root-soft); }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .callout.measured { border-color: var(--conn); background: var(--conn-soft); }
+  .callout.skip { border-color: var(--muted); background: #f1efea; }
+  .callout.unverified { border-color: var(--warn); background: repeating-linear-gradient(45deg, var(--warn-soft), var(--warn-soft) 10px, #fff2cc 10px, #fff2cc 20px); }
+
+  /* --- Tree diagram family --- */
+  .tree { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 12px; margin: 18px 0; overflow-x: auto; }
+  .node { max-width: 100%; overflow-wrap: anywhere; }
+  .tree .caption { font-size: 13px; color: var(--muted); margin: 0 0 10px 6px; }
+  .tree ul { list-style: none; margin: 0; padding-left: 26px; position: relative; }
+  .tree > ul { padding-left: 4px; }
+  .tree li { position: relative; padding: 5px 0 5px 18px; }
+  .tree li::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; border-left: 2px solid var(--line); }
+  .tree li:last-child::before { bottom: auto; height: 22px; }
+  .tree li::after { content: ""; position: absolute; left: 0; top: 22px; width: 14px; border-top: 2px solid var(--line); }
+  .tree > ul > li { padding-left: 0; }
+  .tree > ul > li::before, .tree > ul > li::after { display: none; }
+  .node { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; border: 2px solid; font-size: 14px; background: #fff; }
+  .node small { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .n-store { border-color: var(--store); background: var(--store-soft); }
+  .n-root { border-color: var(--root); background: var(--root-soft); }
+  .n-conn { border-color: var(--conn); background: var(--conn-soft); }
+  .n-hook { border-color: var(--hook); background: var(--hook-soft); }
+  .n-plain { border-color: #c9c4b8; border-style: dashed; color: var(--muted); }
+  .tag { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #fff; border: 1px solid var(--line); }
+  .node.lit { box-shadow: 0 0 0 4px rgba(255, 196, 0, .55); transform: translateY(-1px); transition: all .15s; }
+  .node.held { box-shadow: 0 0 0 4px rgba(201, 42, 42, .35); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; margin: 8px 0 0 4px; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; border: 2px solid; display: inline-block; }
+
+  /* --- Sequence diagram family --- */
+  .seq { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 18px 0; overflow-x: auto; }
+  .seq .caption { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+  .seq-grid { display: grid; min-width: 620px; column-gap: 0; }
+  .seq-head { font-weight: 700; font-size: 13px; text-align: center; padding: 6px 4px; border-radius: 8px; margin: 0 4px 6px; }
+  .seq-row { display: contents; }
+  .seq-cell { border-left: 2px dashed var(--line); min-height: 34px; position: relative; display: flex; align-items: center; justify-content: center; padding: 3px 4px; }
+  .seq-cell:first-child { border-left: none; }
+  .ev { font-size: 12.5px; padding: 4px 8px; border-radius: 6px; border: 1.5px solid; background: #fff; text-align: center; line-height: 1.35; }
+  .ev.store { border-color: var(--store); background: var(--store-soft); }
+  .ev.root { border-color: var(--root); background: var(--root-soft); }
+  .ev.conn { border-color: var(--conn); background: var(--conn-soft); }
+  .ev.hook { border-color: var(--hook); background: var(--hook-soft); }
+  .ev.bad { border-color: var(--bad); background: var(--bad-soft); font-weight: 700; }
+  .ev.react { border-color: #555; background: #f3f3f3; }
+  .step-n { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; }
+
+  /* --- State diagram family --- */
+  .states { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 14px; margin: 18px 0; }
+  .state { border: 2px solid var(--root); border-radius: 14px; padding: 10px; text-align: center; background: var(--root-soft); font-size: 14px; }
+  .state b { display: block; font-size: 15px; }
+  .state code { font-size: 11.5px; }
+  .state.off { border-color: #999; background: #f3f2ef; }
+  .arrow { text-align: center; font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .arrow .a { font-size: 22px; color: var(--fg); display: block; }
+
+  /* --- Simulator --- */
+  .sim { background: var(--card); border: 2px solid var(--accent); border-radius: 14px; padding: 16px; margin: 22px 0; }
+  .sim h4 { margin: 0 0 6px; }
+  .sim .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  button { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--fg); background: #fff; cursor: pointer; }
+  button:hover { background: #f4f1ea; }
+  button.primary { background: var(--fg); color: #fff; }
+  button.primary:hover { background: #3a3f46; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sim-log { font-family: var(--mono); font-size: 13px; background: #1e1e24; color: #e7e5ee; border-radius: 8px; padding: 10px 12px; min-height: 110px; white-space: pre-wrap; }
+  .sim-log .bad { color: #ff8a8a; font-weight: 700; }
+  .sim-log .ok { color: #9fe0a8; }
+  .sim-log .dim { color: #8b93a1; }
+
+  table.api { width: 100%; border-collapse: collapse; font-size: 14px; margin: 14px 0; background: var(--card); }
+  table.api th, table.api td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  table.api th { background: #f1eee8; }
+  table.api td:first-child { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+  .table-wrap { overflow-x: auto; }
+
+  /* --- Quiz --- */
+  .q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 16px 0; }
+  .q p.stem { font-weight: 700; margin-top: 0; }
+  .q .opts { display: grid; gap: 8px; }
+  .q .opts button { text-align: left; border-color: var(--line); }
+  .q .opts button.correct { background: var(--ok-soft); border-color: var(--ok); }
+  .q .opts button.wrong { background: var(--bad-soft); border-color: var(--bad); }
+  .q .fb { margin-top: 10px; font-size: 14.5px; display: none; padding: 8px 12px; border-radius: 8px; }
+  .q .fb.show { display: block; }
+  .q .fb.ok { background: var(--ok-soft); }
+  .q .fb.ng { background: var(--bad-soft); }
+  #score { font-weight: 700; }
+
+  footer { margin-top: 64px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+  @media (max-width: 640px) {
+    body { font-size: 15.5px; }
+    h1 { font-size: 27px; }
+    h2 { font-size: 21px; }
+    .states { grid-template-columns: 1fr; }
+    .arrow .a { transform: rotate(90deg); }
+    .tree ul { padding-left: 14px; }
+    .tree li { padding-left: 12px; }
+    .tree li::after { width: 9px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="hero">
+  <div class="kicker">LEARN · react-redux v9.3.0 · src/utils/Subscription.ts</div>
+  <h1>React Redux の <code>Subscription</code> とは何か</h1>
+  <p class="lede">Redux のストアは「何かが変わった」としか言わない、ぶっきらぼうなイベント発行器です。<code>Subscription</code> は、その素っ気ない通知を<strong>コンポーネントツリーの親から子へ、順番を守って配り直す</strong>ための小さな中継網です。このページでは、なぜそんな中継が必要なのか、どう動くのか、そしてどこまで守ってくれるのかを、実際のソースと実測ログで確かめていきます。</p>
+</header>
+
+<nav class="toc" aria-label="目次">
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#background">Background — Redux の購読と、React の描画順</a></li>
+    <li><a href="#intuition">Intuition — 「親が終わるまで子に言わない」</a></li>
+    <li><a href="#mechanics">Mechanics — API・呼び出し順・参照カウント・限界</a></li>
+    <li><a href="#codebase">In this codebase — Provider / connect / useSelector での使われ方</a></li>
+    <li><a href="#quiz">Quiz — 5 問</a></li>
+  </ol>
+</nav>
+
+<!-- ================================================================ -->
+<h2 id="background">1. Background</h2>
+
+<div class="callout skip">
+  <span class="t">Redux の <code>store.subscribe</code> を知っている人は、次の「狭い背景」まで飛ばして構いません。</span>
+</div>
+
+<h3>広い背景：Redux ストアはただのイベント発行器</h3>
+<p>Redux のストアが公開しているのは、実質的に 3 つの関数です。<code>getState()</code> は現在の状態を返し、<code>dispatch(action)</code> は reducer を通して状態を更新し、<code>subscribe(listener)</code> は「dispatch されたら呼んでほしい関数」を登録します。Mark Erikson が <a href="https://blog.isquaredsoftware.com/2018/11/react-redux-history-implementation/">React-Redux の歴史を解説した記事</a>で示している最小実装は、驚くほど短いものです。</p>
+<pre><span class="k">function</span> createStore(reducer) {
+  <span class="k">let</span> state
+  <span class="k">const</span> listeners = []
+  <span class="k">return</span> {
+    getState: () =&gt; state,
+    subscribe(l) { listeners.push(l); <span class="k">return</span> () =&gt; listeners.splice(listeners.indexOf(l), 1) },
+    dispatch(action) {
+      state = reducer(state, action)
+<span class="hl">      listeners.forEach(l =&gt; l())   <span class="c">// 状態が変わったかどうかは確認しない。引数も渡さない</span></span>
+    },
+  }
+}</pre>
+<p>ここで注目すべき性質は二つあります。第一に、ストアは<strong>何が変わったかを教えてくれません</strong>。リスナーは毎回自分で <code>getState()</code> を呼び、自分に関係する部分を取り出し、前回と比べる必要があります。第二に、リスナーは<strong>登録された順に</strong>呼ばれます。この「登録順」という何気ない性質が、React と組み合わせたときに厄介な問題を引き起こします。</p>
+
+<h3>狭い背景：React は子のエフェクトを先に実行する</h3>
+<p>React はコミット時、エフェクト（<code>useEffect</code> / <code>useLayoutEffect</code>）を<strong>子から親の順</strong>で実行します。ですから、各コンポーネントがマウント時のエフェクトの中で素朴に <code>store.subscribe</code> を呼ぶと、<em>子のほうが親より先に</em>ストアへ登録されてしまいます。すると dispatch のたびに、子のリスナーが親より先に走ることになります。</p>
+<p>これが問題になるのは、子が「親から渡された props」を使ってストアから値を取り出す場合です。親が次のレンダーで渡すはずの新しい props を、子はまだ受け取っていません。その状態で子が古い props を使ってストアを読むと、次の二つの不具合が起こります。</p>
+
+<div class="callout def">
+  <span class="t">用語：stale props と zombie children</span>
+  <strong>stale props</strong> — 親が新しい props を渡して再レンダーする<em>はず</em>なのに、その前に子のセレクタが古い props で実行されてしまう状況です。<br>
+  <strong>zombie child</strong> — 子が親より先に購読していて、ある action がその子のデータ（たとえば todo の 1 件）を削除したとします。親は次のレンダーでその子を描かなくなる<em>はず</em>ですが、子のリスナーが先に走り、もう存在しないデータを読んで例外を投げます。<br>
+  <span class="src">出典: <a href="https://react-redux.js.org/api/hooks#stale-props-and-zombie-children">react-redux.js.org / Hooks / Usage Warnings</a></span>
+</div>
+
+<p>公式ドキュメントによれば、v4 まではこの種のバグ報告が繰り返し寄せられていました。v5 からは <code>ownProps</code> との整合性を保証しようとしており、v7 以降その保証を担っているのが、ここで扱う <code>Subscription</code> です。</p>
+
+<!-- ================================================================ -->
+<h2 id="intuition">2. Intuition</h2>
+
+<p>考え方そのものは単純です。<strong>ストアに直接つながるのは根っこの 1 本だけにし、そこから先は「最寄りの connect された祖先」経由で通知を受け取る</strong>ことにします。通知はツリーの形に沿って流れ、各中継点は<strong>自分の処理（再レンダー）が終わってから</strong>、下流に「どうぞ」と伝えます。</p>
+
+<div class="tree">
+  <p class="caption">図 A — Subscription のツリー。矢印ではなく入れ子で「誰の addNestedSub に登録されているか」を表しています</p>
+  <ul>
+    <li><span class="node n-store">Redux store <small>listeners = [root.handleChangeWrapper]</small></span>
+      <ul>
+        <li><span class="node n-root">&lt;Provider&gt; の Subscription <small>onStateChange = notifyNestedSubs</small></span>
+          <ul>
+            <li><span class="node n-conn">connect(TodoList) の Subscription <small>onStateChange = checkForUpdates</small></span>
+              <ul>
+                <li><span class="node n-hook">useSelector in &lt;TodoItem id="a"&gt; <small>addNestedSub(listener)</small></span></li>
+                <li><span class="node n-hook">useSelector in &lt;TodoItem id="b"&gt; <small>addNestedSub(listener)</small></span></li>
+              </ul>
+            </li>
+            <li><span class="node n-hook">useSelector in &lt;Header&gt; <small>Provider の addNestedSub に直結</small></span></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+  <div class="legend">
+    <span><i class="sw" style="border-color:var(--store);background:var(--store-soft)"></i>ストア</span>
+    <span><i class="sw" style="border-color:var(--root);background:var(--root-soft)"></i>Provider の root Subscription</span>
+    <span><i class="sw" style="border-color:var(--conn);background:var(--conn-soft)"></i>connect が作る中継 Subscription</span>
+    <span><i class="sw" style="border-color:var(--hook);background:var(--hook-soft)"></i>useSelector（葉。自分の Subscription は作らない）</span>
+  </div>
+</div>
+
+<p>具体例で考えてみましょう。state が <code>{ ids: ['a','b'], byId: { a: {...}, b: {...} } }</code> で、<code>removeTodo('a')</code> が dispatch されたとします。</p>
+<ol>
+  <li>ストアは唯一のリスナーである Provider の root を呼びます。</li>
+  <li>root は子リスト（<code>connect(TodoList)</code> と <code>&lt;Header&gt;</code> の useSelector）へ通知します。</li>
+  <li><code>connect(TodoList)</code> は <code>mapState</code> を再計算し、<code>ids</code> が <code>['b']</code> に変わったことに気づきます。ここで<strong>子へ通知せずに止まり</strong>、自分の再レンダーを予約します。</li>
+  <li>React が TodoList を再レンダーし、<code>TodoItem id="a"</code> はツリーから消えます。</li>
+  <li>コミット後、<code>connect(TodoList)</code> はようやく <code>notifyNestedSubs()</code> を呼び、残った子へ通知を流します。</li>
+</ol>
+<p>要するに <code>Subscription</code> は、<strong>「ストアの登録順」を「コンポーネントツリーの深さ順」に置き換えるための仕組み</strong>です。下のシミュレータで、中継点が止まる様子を確かめてみてください。</p>
+
+<div class="sim" id="sim">
+  <h4>シミュレータ：dispatch(removeTodo('a')) はどう流れるか</h4>
+  <p style="margin:4px 0;font-size:14px">モードを選んで「1 ステップ進める」を押してください。ログは実際の <code>Subscription.ts</code> と React で計測した順序（後述）を再現しています。</p>
+  <div class="controls" role="group" aria-label="モード">
+    <button type="button" data-mode="flat" aria-pressed="true">全員がストアへ直接 subscribe（素朴な実装）</button>
+    <button type="button" data-mode="nested" aria-pressed="false">connect が中継（Subscription ツリー）</button>
+  </div>
+  <div class="tree" style="margin:8px 0">
+    <ul>
+      <li><span class="node n-store" id="s-store">store</span>
+        <ul>
+          <li><span class="node n-conn" id="s-parent">TodoList <small id="s-parent-kind">useSelector(ids)</small></span>
+            <ul>
+              <li><span class="node n-hook" id="s-child">TodoItem id="a" <small>useSelector(s =&gt; s.byId[id].text)</small></span></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+  <div class="controls">
+    <button type="button" class="primary" id="sim-step">1 ステップ進める</button>
+    <button type="button" id="sim-reset">リセット</button>
+  </div>
+  <div class="sim-log" id="sim-log" aria-live="polite"></div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="mechanics">3. Mechanics</h2>
+
+<p>直感が掴めたところで、実装を読んでいきます。<code>src/utils/Subscription.ts</code> は 184 行で、<strong>二重連結リストによるリスナー集合</strong>と、それを包む<strong>参照カウント付きの購読オブジェクト</strong>の二層でできています。</p>
+
+<h3>3.1 公開インターフェース</h3>
+<pre><span class="k">export interface</span> Subscription {
+  addNestedSub: (listener: VoidFunc) =&gt; VoidFunc   <span class="c">// 子（または useSelector）が自分を登録する入口。解除関数を返す</span>
+  notifyNestedSubs: VoidFunc                        <span class="c">// 登録された子へ順に通知する</span>
+  handleChangeWrapper: VoidFunc                     <span class="c">// 親（またはストア）に渡す自分のリスナー。onStateChange を呼ぶだけ</span>
+  isSubscribed: () =&gt; boolean                       <span class="c">// 「自分自身」が購読中か（子がいるだけでは false）</span>
+  onStateChange?: VoidFunc | null                   <span class="c">// 通知を受けたときの振る舞い。外から差し込む</span>
+  trySubscribe: VoidFunc                            <span class="c">// 自分自身として購読を開始（冪等）</span>
+  tryUnsubscribe: VoidFunc                          <span class="c">// 自分自身として購読を終了（冪等）</span>
+  getListeners: () =&gt; ListenerCollection            <span class="c">// テスト・デバッグ用</span>
+}</pre>
+<p class="src">src/utils/Subscription.ts:81-90</p>
+
+<p>設計上の要点は、<strong><code>onStateChange</code> が外から差し込まれる</strong>ことです。<code>Subscription</code> 自身は「通知が来たら何をすべきか」を知りません。Provider は <code>notifyNestedSubs</code> をそのまま差し込み（素通しの中継）、connect は <code>checkForUpdates</code> を差し込みます（再計算してから、必要なら止める）。</p>
+
+<h3>3.2 親への接続：trySubscribe</h3>
+<pre><span class="k">function</span> trySubscribe() {
+  subscriptionsAmount++
+  <span class="k">if</span> (!unsubscribe) {
+<span class="hl">    unsubscribe = parentSub</span>
+<span class="hl">      ? parentSub.addNestedSub(handleChangeWrapper)   <span class="c">// 親 Subscription があれば親へ</span></span>
+<span class="hl">      : store.subscribe(handleChangeWrapper)          <span class="c">// なければストアへ直接</span></span>
+    listeners = createListenerCollection()
+  }
+}</pre>
+<p class="src">src/utils/Subscription.ts:137-146</p>
+<p><code>createSubscription(store, parentSub?)</code> の第 2 引数の有無だけで、「ストア直結の root」になるか「誰かの子」になるかが決まります。そして <code>parentSub.addNestedSub</code> は内部で親自身の <code>trySubscribe()</code> を呼ぶので、<strong>子が先に購読を始めても、祖先を芋づる式に接続していきます</strong>。</p>
+
+<div class="callout measured">
+  <span class="t">実測 1：子が先に購読しても、ストアへの登録は 1 回だけ</span>
+  実際の <code>Subscription.ts</code> を <code>/tmp</code> にコピーし（import 拡張子のみ修正）、Node 24 で次の順に呼びました：<code>parent.trySubscribe()</code> → <code>root.trySubscribe()</code> → 子 2 つ。
+<pre>parent.trySubscribe()
+  [store] subscribe (total=1)      <span class="c">← 子の購読が root を連鎖的に接続</span>
+root.trySubscribe()                <span class="c">← 既に接続済みなので store には何も起きない</span></pre>
+  子を 3 つ作ってから root を購読する別ケースでも、<code>[store] subscribe</code> は 1 回だけでした。これは React の「子エフェクトが先」という順序と噛み合っています。Provider の <code>useLayoutEffect</code> が走る前に子が接続を始めても、壊れません。
+</div>
+
+<h3>3.3 子への配信：リスナー集合と notify</h3>
+<p>リスナー集合は配列ではなく、<code>first</code> / <code>last</code> を持つ<strong>二重連結リスト</strong>です。購読解除は O(1) で済み、<code>notify</code> はリストを先頭から辿ります。</p>
+<pre>notify() {
+  batch(() =&gt; {
+    <span class="k">let</span> listener = first
+    <span class="k">while</span> (listener) {
+      listener.callback()
+<span class="hl">      listener = listener.next      <span class="c">// callback の後で next を読む</span></span>
+    }
+  })
+},</pre>
+<p class="src">src/utils/Subscription.ts:25-33</p>
+
+<div class="callout warn">
+  <span class="t">注意：<code>batch</code> は v9 では何もしない</span>
+  <code>batch</code> の実体は <code>defaultNoopBatch</code> で、コールバックをそのまま呼ぶだけです（<code>src/utils/batch.ts:2-4</code>）。React 18 以降の自動バッチングに任せているため、ここで <code>unstable_batchedUpdates</code> のようなラップは行われません。
+</div>
+
+<div class="callout measured">
+  <span class="t">実測 2：通知は深さ優先で流れる</span>
+  root → parent → (childA, childB) で、childA の下に useSelector 相当の葉を 1 つ付けて dispatch しました。
+<pre>root.onStateChange -&gt; notifyNestedSubs
+  parent.onStateChange
+    childA.onStateChange
+      leaf (useSelector listener)   <span class="c">← childB より先</span>
+    childB.onStateChange</pre>
+  各 <code>onStateChange</code> が同期的に <code>notifyNestedSubs()</code> を呼べば、通知は<strong>深さ優先・登録順</strong>で流れます。兄弟間の順序は、<code>addNestedSub</code> された順です（<code>test/utils/Subscription.spec.ts</code> の <code>listeners are notified in order</code> も同じことを検証しています）。
+</div>
+
+<h3>3.4 参照カウント：「自分」と「子のため」を区別する</h3>
+<p>ある Subscription が親につながっている理由は二つあり得ます。<strong>自分自身が通知を欲しい</strong>か、<strong>子が自分を経由して通知を欲しい</strong>かです。<code>subscriptionsAmount</code> はこの二種類をまとめて数え、0 になったときだけ親から外れます。一方 <code>selfSubscribed</code> は「自分自身」の分だけを表すフラグで、<code>trySubscribe</code> / <code>tryUnsubscribe</code> を何度呼んでも二重に数えないようにしています。</p>
+
+<div class="states" aria-label="Subscription の状態遷移">
+  <div class="state off"><b>未接続</b><code>unsubscribe = undefined</code><br><code>listeners = nullListeners</code><br><code>amount = 0</code></div>
+  <div class="arrow"><span class="a">→</span><code>trySubscribe()</code><br>または <code>addNestedSub()</code></div>
+  <div class="state"><b>接続中</b>親 or ストアに登録済み<br><code>amount ≥ 1</code><br><small>self と子の数の合計</small></div>
+  <div class="arrow"><span class="a">→</span>最後の<br><code>tryUnsubscribe()</code><br>で amount = 0</div>
+  <div class="state off"><b>切断</b>親から外れる<br><code>listeners.clear()</code><br>→ 未接続へ戻る</div>
+</div>
+
+<div class="callout measured">
+  <span class="t">実測 3：自分が抜けても、子がいれば接続は残る</span>
+<pre>childA.isSubscribed() true
+childA self-unsubscribed; isSubscribed() false listeners 1   <span class="c">← 葉がまだ 1 つ残っている</span>
+leaf removed; childA listeners 0                            <span class="c">← ここで初めて親から外れる</span>
+second unsubLeaf() call is a no-op                          <span class="c">← 解除関数は冪等</span></pre>
+  <code>isSubscribed()</code> は「自分自身が購読中か」だけを返し、子の有無は反映しません（<code>src/utils/Subscription.ts:133-135</code>）。
+</div>
+
+<h3>3.5 connect の中継ロジック：いつ止め、いつ流すか</h3>
+<p>中継点が「親の再レンダーが終わるまで子に言わない」を実現している場所は、<code>connect.tsx</code> の二つの関数です。</p>
+<pre><span class="c">// 通知を受けたとき（subscribeUpdates 内の checkForUpdates）</span>
+newChildProps = childPropsSelector(store.getState(), lastWrapperProps.current)
+<span class="k">if</span> (newChildProps === lastChildProps.current) {
+<span class="hl">  <span class="k">if</span> (!renderIsScheduled.current) notifyNestedSubs()   <span class="c">// 自分は変わらない → すぐ子へ流す</span></span>
+} <span class="k">else</span> {
+  lastChildProps.current = newChildProps
+  childPropsFromStoreUpdate.current = newChildProps
+<span class="hl">  renderIsScheduled.current = <span class="k">true</span>                       <span class="c">// 自分は変わる → 子へは流さず、再レンダーを予約</span></span>
+  additionalSubscribeListener()                         <span class="c">// useSyncExternalStore のリスナーを叩く</span>
+}</pre>
+<p class="src">src/components/connect.tsx:120-172（抜粋）</p>
+<pre><span class="c">// 再レンダーのコミット後（useLayoutEffect で呼ばれる captureWrapperProps）</span>
+lastWrapperProps.current = wrapperProps
+renderIsScheduled.current = <span class="k">false</span>
+<span class="k">if</span> (childPropsFromStoreUpdate.current) {
+  childPropsFromStoreUpdate.current = <span class="k">null</span>
+<span class="hl">  notifyNestedSubs()                                    <span class="c">// ここで初めて子へ流す</span></span>
+}</pre>
+<p class="src">src/components/connect.tsx:84-93, 900-907</p>
+<p>connect はさらに、自分の Subscription を<strong>新しい Context 値として子孫へ提供</strong>します（<code>connect.tsx:808-822</code> の <code>overriddenContextValue</code>）。子孫の connect や useSelector が <code>useContext</code> で受け取る <code>subscription</code> は、Provider のものではなく、この最寄りの connect のものになります。ツリーの入れ子は、こうして Context の上書きによって作られています。</p>
+
+<div class="callout">
+  <span class="t">useSelector は「葉」であって「中継点」ではない</span>
+  useSelector は <code>useSyncExternalStoreWithSelector(subscription.addNestedSub, store.getState, ...)</code> と書かれており、<strong>Context から受け取った Subscription の <code>addNestedSub</code> を subscribe 関数として渡すだけ</strong>です（<code>src/hooks/useSelector.ts:243-249</code>）。自分の Subscription は作らず、Context Provider を描画することもできません。そのため、フックだけで組んだツリーでは、すべての useSelector が Provider の root に<strong>フラットに</strong>ぶら下がります。
+</div>
+
+<h3>3.6 限界：実測で分かった「守ってくれる範囲」</h3>
+<p>では、connect を親に置けば zombie child は完全に消えるのでしょうか。公式ドキュメントは、connect を hooks コンポーネントの直上に置けば「these issues」を防げると書いています。この主張を確かめるため、一時的な Vitest spec を書き、todo <code>a</code> を削除する action を dispatch してログを取りました（計測後に spec は削除済み）。</p>
+
+<div class="seq">
+  <p class="caption">図 B — hooks だけの場合（親も子も useSelector）。実測ログ順</p>
+  <div class="seq-grid" style="grid-template-columns: 34px repeat(3, 1fr)">
+    <div></div>
+    <div class="seq-head" style="background:var(--store-soft)">store / root</div>
+    <div class="seq-head" style="background:var(--hook-soft)">Parent (useSelector ids)</div>
+    <div class="seq-head" style="background:var(--hook-soft)">Child id="a"</div>
+
+    <div class="step-n">1</div><div class="seq-cell"><span class="ev store">dispatch(remove)</span></div><div class="seq-cell"></div><div class="seq-cell"></div>
+    <div class="step-n">2</div><div class="seq-cell"></div><div class="seq-cell"></div><div class="seq-cell"><span class="ev bad">selector 実行<br>exists=false → TypeError</span></div>
+    <div class="step-n">3</div><div class="seq-cell"></div><div class="seq-cell"><span class="ev hook">selector ids=0</span></div><div class="seq-cell"></div>
+    <div class="step-n">4</div><div class="seq-cell"></div><div class="seq-cell"><span class="ev react">再レンダー（selector ids=0）</span></div><div class="seq-cell"></div>
+    <div class="step-n">5</div><div class="seq-cell"></div><div class="seq-cell"></div><div class="seq-cell"><span class="ev react">passive cleanup（unmount）</span></div>
+  </div>
+</div>
+
+<div class="seq">
+  <p class="caption">図 C — 親を connect にした場合。実測ログ順</p>
+  <div class="seq-grid" style="grid-template-columns: 34px repeat(3, 1fr)">
+    <div></div>
+    <div class="seq-head" style="background:var(--store-soft)">store / root</div>
+    <div class="seq-head" style="background:var(--conn-soft)">connect(Parent)</div>
+    <div class="seq-head" style="background:var(--hook-soft)">Child id="a"</div>
+
+    <div class="step-n">1</div><div class="seq-cell"><span class="ev store">dispatch(remove)</span></div><div class="seq-cell"></div><div class="seq-cell"></div>
+    <div class="step-n">2</div><div class="seq-cell"></div><div class="seq-cell"><span class="ev conn">mapState ids=0<br>→ 子へ流さず停止</span></div><div class="seq-cell"></div>
+    <div class="step-n">3</div><div class="seq-cell"></div><div class="seq-cell"><span class="ev react">ParentView render ids=0</span></div><div class="seq-cell"></div>
+    <div class="step-n">4</div><div class="seq-cell"></div><div class="seq-cell"></div><div class="seq-cell"><span class="ev react">layout cleanup（unmount）</span></div>
+    <div class="step-n">5</div><div class="seq-cell"></div><div class="seq-cell"><span class="ev conn">layout effect（commit）<br>→ notifyNestedSubs()</span></div><div class="seq-cell"></div>
+    <div class="step-n">6</div><div class="seq-cell"></div><div class="seq-cell"></div><div class="seq-cell"><span class="ev bad">selector 実行<br>exists=false → TypeError</span></div>
+    <div class="step-n">7</div><div class="seq-cell"></div><div class="seq-cell"></div><div class="seq-cell"><span class="ev react">passive cleanup（unmount）</span></div>
+  </div>
+</div>
+
+<div class="callout bad">
+  <span class="t">ドキュメントと実測の食い違い：「順序」は守られるが、「ゾンビの 1 回」は消えない</span>
+  図 C で connect は約束どおり、<strong>自分の mapState → 再レンダー → コミット → 子へ通知</strong>という順序を守りました。ところが子のセレクタは、ステップ 6 で一度だけ、削除済みのデータに対して実行されています。原因は購読解除のタイミングです。useSelector の購読は <code>useSyncExternalStore</code> 経由なので、解除は <strong>passive エフェクトの cleanup</strong>（ステップ 7）で行われます。一方、connect が子へ通知するのは <strong>layout エフェクト</strong>（ステップ 5）です。この二つの間に、アンマウント予定の子のリスナーがまだリストに残っています。<br><br>
+  この例外がテストを落とさなかったのは、<code>useSyncExternalStoreWithSelector</code> がストア更新経由のセレクタ例外を握りつぶし、再レンダーへ回すからです。リポジトリ自身のテスト <code>allows dealing with stale props by putting a specific connected component above the hooks component</code>（<code>test/hooks/useSelector.spec.tsx:594-640</code>）も、最後に <code>expect(sawInconsistentState).toBe(true)</code> と書いています。つまり<strong>「不整合な状態は観測されうるが、アプリは壊れない」</strong>ことを期待値にしているわけです。
+</div>
+
+<div class="callout unverified">
+  <span class="t">未検証：例外を握りつぶす正確な場所</span>
+  例外が <code>use-sync-external-store/with-selector</code> の <code>checkIfSnapshotChanged</code> 付近で catch されている、というのは React の実装から推測したもので、今回は該当コードを読んでいません。確かめるには、<code>node_modules/use-sync-external-store</code> の shim 実装と、React 19 本体の <code>useSyncExternalStore</code> 実装を読む必要があります。
+</div>
+
+<h3>3.7 API 早見表</h3>
+<div class="table-wrap"><table class="api">
+  <thead><tr><th>関数</th><th>いつ呼ばれるか</th><th>何が起きるか</th></tr></thead>
+  <tbody>
+    <tr><td>createSubscription(store, parent?)</td><td>Provider / connect の <code>useMemo</code></td><td>未接続のオブジェクトを返すだけ。まだどこにも登録しない</td></tr>
+    <tr><td>trySubscribe()</td><td>Provider・connect の layout エフェクト</td><td>self フラグを立て、<code>amount++</code>。初回なら親 or ストアへ登録</td></tr>
+    <tr><td>addNestedSub(fn)</td><td>子 Subscription の接続時、useSelector の uSES subscribe</td><td>内部で <code>trySubscribe</code>（self ではない）、リストへ追加、解除関数を返す</td></tr>
+    <tr><td>notifyNestedSubs()</td><td>Provider では即座に、connect ではコミット後</td><td>リストを先頭から同期的に呼ぶ</td></tr>
+    <tr><td>handleChangeWrapper()</td><td>親またはストアから</td><td><code>onStateChange</code> があれば呼ぶ。なければ何もしない</td></tr>
+    <tr><td>tryUnsubscribe()</td><td>エフェクトの cleanup</td><td>self フラグを下ろし、<code>amount--</code>。0 なら親から外れてリストを空にする</td></tr>
+  </tbody>
+</table></div>
+
+<!-- ================================================================ -->
+<h2 id="codebase">4. In this codebase</h2>
+
+<p>このリポジトリで <code>createSubscription</code> を呼んでいるのは、<code>Provider</code> と <code>connect</code> の 2 か所だけです。useSelector は Context 経由でそれを受け取って使うだけです。</p>
+
+<h3>Provider：ツリーの根を作る</h3>
+<pre><span class="k">const</span> contextValue = React.useMemo(() =&gt; {
+<span class="hl">  <span class="k">const</span> subscription = createSubscription(store)          <span class="c">// parent なし = ストア直結の root</span></span>
+  <span class="k">return</span> { store, subscription, getServerState: ... }
+}, [store, serverState])
+
+useIsomorphicLayoutEffect(() =&gt; {
+<span class="hl">  subscription.onStateChange = subscription.notifyNestedSubs   <span class="c">// 素通しの中継</span></span>
+  subscription.trySubscribe()
+  <span class="k">if</span> (previousState !== store.getState()) {
+    subscription.notifyNestedSubs()                       <span class="c">// 描画中に state が進んでいたら追いつかせる</span>
+  }
+  <span class="k">return</span> () =&gt; { subscription.tryUnsubscribe(); subscription.onStateChange = <span class="k">undefined</span> }
+}, [contextValue, previousState])</pre>
+<p class="src">src/components/Provider.tsx:62-98（抜粋）</p>
+<p><code>previousState</code> との比較は、初回レンダーからエフェクト実行までの間に dispatch されたケースへの対策です。そのあいだ root はまだストアに登録されていないので、取りこぼした更新をここで配り直しています。</p>
+
+<h3>connect：中継点を作り、Context を上書きする</h3>
+<pre><span class="k">const</span> subscription = createSubscription(
+  store,
+<span class="hl">  didStoreComeFromProps ? <span class="k">undefined</span> : contextValue!.subscription,</span>
+)</pre>
+<p class="src">src/components/connect.tsx:791-794</p>
+<p><code>&lt;Connected store={otherStore} /&gt;</code> のように props でストアを渡された場合は、親を持たない独立した root になります。このとき Context は上書きしません（<code>connect.tsx:809-814</code>）。「props 由来のストアを購読する connect が、Context 由来のツリーに割り込まない」ためのルールです。また <code>mapStateToProps</code> を持たない connect（<code>shouldHandleStateChanges === false</code>）は Subscription を作らないので、ツリー上では<strong>透明</strong>になります。</p>
+
+<h3>関連するテスト</h3>
+<ul>
+  <li><code>test/utils/Subscription.spec.ts</code> — 兄弟の通知順と、購読解除後に通知されないことを直接検証しています。</li>
+  <li><code>test/hooks/useSelector.spec.tsx:149-207</code> — Provider の root に付く useSelector リスナーの数（<code>getListeners().get().length</code>）の増減を検証しています。</li>
+  <li><code>test/hooks/useSelector.spec.tsx:487</code> <code>ignores transient errors in selector (e.g. due to stale props)</code> — stale props による一時的な例外が外に漏れないことを検証しています。</li>
+  <li><code>test/components/connect.spec.tsx:3038</code> 以降 <code>Subscription and update timing correctness</code> — 連続した dispatch でも top-down 更新が保たれることを検証しています。</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2 id="quiz">5. Quiz</h2>
+<p>Mechanics の内容を確かめる 5 問です。選択肢をクリックすると、正誤と解説が表示されます。 正解数：<span id="score">0 / 5</span></p>
+
+<div class="q" data-answer="1">
+  <p class="stem">Q1. React は子のエフェクトを先に実行します。connect(Child) の layout エフェクトが Provider より先に <code>trySubscribe()</code> を呼んだとき、何が起きますか？</p>
+  <div class="opts">
+    <button type="button">A. Provider の root がまだ未接続なので、子は通知を一切受け取れなくなる</button>
+    <button type="button">B. 子の <code>addNestedSub</code> 経由で root も連鎖的にストアへ接続され、ストアへの登録は結局 1 回だけになる</button>
+    <button type="button">C. 子がストアに直接 subscribe し、後から root も subscribe するので、ストアには 2 つのリスナーが登録される</button>
+    <button type="button">D. 例外が投げられ、Provider の外で connect を使ったときと同じエラーになる</button>
+  </div>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="stem">Q2. connect の <code>checkForUpdates</code> が、新しい child props が前回と<strong>異なる</strong>と判断したとき、子への通知はどうなりますか？</p>
+  <div class="opts">
+    <button type="button">A. 直ちに <code>notifyNestedSubs()</code> を呼び、子と自分の再レンダーを並行して進める</button>
+    <button type="button">B. 子への通知は永久にスキップされる。子は自分の再レンダーで最新値を読むので不要だから</button>
+    <button type="button">C. 通知を保留して再レンダーを予約し、コミット後の layout エフェクト（<code>captureWrapperProps</code>）で <code>notifyNestedSubs()</code> を呼ぶ</button>
+    <button type="button">D. <code>batch()</code> で包み、React に子の更新をまとめて処理させる</button>
+  </div>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="stem">Q3. ある Subscription で <code>tryUnsubscribe()</code> を呼んだ直後、<code>isSubscribed()</code> は <code>false</code> を返しました。この時点で、この Subscription は親から外れていますか？</p>
+  <div class="opts">
+    <button type="button">A. 外れているとは限らない。<code>addNestedSub</code> した子が残っていれば <code>subscriptionsAmount</code> は 0 にならず、接続は維持される</button>
+    <button type="button">B. 必ず外れている。<code>isSubscribed()</code> は親との接続の有無を返すから</button>
+    <button type="button">C. 必ず外れている。<code>tryUnsubscribe()</code> は子のリスナーも含めてリストを即座に clear するから</button>
+    <button type="button">D. 次の dispatch が来るまで判断できない</button>
+  </div>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="stem">Q4. フックだけで書かれたツリー（Provider の下に useSelector を使うコンポーネントが何階層も続く）で、Subscription の構造はどうなっていますか？</p>
+  <div class="opts">
+    <button type="button">A. useSelector がそれぞれ自分の Subscription を作り、コンポーネントの深さどおりに入れ子になる</button>
+    <button type="button">B. useSelector はそれぞれ <code>store.subscribe</code> を直接呼び、Provider の Subscription は使われない</button>
+    <button type="button">C. 同じコンポーネント内の複数の useSelector が、1 つの Subscription にまとめられる</button>
+    <button type="button">D. すべての useSelector が、Provider の root Subscription の <code>addNestedSub</code> にフラットに登録される</button>
+  </div>
+  <div class="fb"></div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="stem">Q5. 親を connect、子を useSelector にして、子が表示している todo を削除する action を dispatch しました。このページの実測で、子のセレクタはどうなりましたか？</p>
+  <div class="opts">
+    <button type="button">A. 親がコミットして子をアンマウントしたので、子のセレクタは一度も実行されなかった</button>
+    <button type="button">B. 親のコミット後に一度だけ削除済みデータに対して実行されて例外を投げたが、その例外は握りつぶされてテストは通った</button>
+    <button type="button">C. 親の mapState より先に実行され、例外がテストを失敗させた</button>
+    <button type="button">D. 実行されたが、connect が古い state のスナップショットを渡したので例外は起きなかった</button>
+  </div>
+  <div class="fb"></div>
+</div>
+
+<footer>
+  <p>検証環境：react-redux 9.3.0（<code>/Users/ryotamurakami/clone/react-redux</code>）、React 19.2.8、Vitest 4.1.11、Node v24.21.0。実測 1〜3 は <code>src/utils/Subscription.ts</code> の実ファイルを <code>/tmp/rr-sub-measure</code> にコピーして実行しました。図 B・C は一時的な spec で計測し、計測後に削除しています。</p>
+  <p>参考：<a href="https://react-redux.js.org/api/hooks#stale-props-and-zombie-children">React Redux Hooks — Stale Props and "Zombie Children"</a> ／ <a href="https://blog.isquaredsoftware.com/2018/11/react-redux-history-implementation/">Mark Erikson — The History and Implementation of React-Redux</a></p>
+</footer>
+
+</main>
+
+<script>
+(function () {
+  // ---- Simulator ----
+  var scripts = {
+    flat: [
+      { lit: ['s-store'], log: '<span class="dim">[dispatch]</span> removeTodo("a")  store は登録順にリスナーを呼ぶ' },
+      { lit: ['s-child'], bad: ['s-child'], log: '<span class="bad">Child selector: s.byId["a"] は undefined → TypeError</span>  (子が先に subscribe 済み)' },
+      { lit: ['s-parent'], log: 'Parent selector: ids=[]  → 再レンダー予約' },
+      { lit: ['s-parent'], log: 'Parent 再レンダー → Child をツリーから外す' },
+      { lit: [], log: '<span class="dim">Child passive cleanup (unmount)。例外は uSES が握りつぶすので画面は壊れない</span>' }
+    ],
+    nested: [
+      { lit: ['s-store'], log: '<span class="dim">[dispatch]</span> removeTodo("a")  store のリスナーは Provider の root だけ' },
+      { lit: ['s-parent'], held: ['s-parent'], log: 'connect(Parent) mapState: ids=[]  → 変化あり。<span class="ok">子へは流さず停止</span>' },
+      { lit: ['s-parent'], held: ['s-parent'], log: 'ParentView render ids=0 → Child のアンマウントが決まる' },
+      { lit: ['s-parent'], log: 'commit: layout effect → captureWrapperProps → notifyNestedSubs()' },
+      { lit: ['s-child'], bad: ['s-child'], log: '<span class="bad">Child selector (まだリストに残っている): TypeError</span>  → uSES が握りつぶす' },
+      { lit: [], log: '<span class="dim">Child passive cleanup (unmount)。順序は守られたが、ゾンビの 1 回は残る</span>' }
+    ]
+  };
+  var mode = 'flat', i = 0;
+  var logEl = document.getElementById('sim-log');
+  var ids = ['s-store', 's-parent', 's-child'];
+  function clearMarks() { ids.forEach(function (id) { var el = document.getElementById(id); el.classList.remove('lit', 'held'); }); }
+  function reset() {
+    i = 0; clearMarks();
+    logEl.innerHTML = '<span class="dim">初期状態: ids=["a"], byId.a={text:"A"}。「1 ステップ進める」を押してください。</span>';
+    var kind = document.getElementById('s-parent-kind');
+    kind.textContent = mode === 'flat' ? 'useSelector(ids)' : 'connect(mapState → ids)';
+  }
+  document.getElementById('sim-step').addEventListener('click', function () {
+    var steps = scripts[mode];
+    if (i >= steps.length) { logEl.innerHTML += '\n<span class="dim">— 終了。リセットでやり直せます —</span>'; return; }
+    var s = steps[i++];
+    clearMarks();
+    (s.lit || []).forEach(function (id) { document.getElementById(id).classList.add('lit'); });
+    (s.held || []).forEach(function (id) { document.getElementById(id).classList.add('held'); });
+    if (i === 1) logEl.innerHTML = '';
+    logEl.innerHTML += (i > 1 ? '\n' : '') + i + '. ' + s.log;
+  });
+  document.getElementById('sim-reset').addEventListener('click', reset);
+  document.querySelectorAll('[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      mode = b.getAttribute('data-mode');
+      document.querySelectorAll('[data-mode]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      reset();
+    });
+  });
+  reset();
+
+  // ---- Quiz ----
+  var feedback = [
+    [
+      '誤り。子の addNestedSub は親の trySubscribe を内部で呼ぶので、root は子の接続時点でストアにつながります。通知が取りこぼされることはありません。',
+      '正解！ addNestedSub → trySubscribe の連鎖で root がストアにつながります。後から Provider 自身が trySubscribe しても、unsubscribe が既にあるのでストアには何も起きません（実測 1）。',
+      '誤り。parentSub がある Subscription は store.subscribe を呼びません。ストアへ直接つながるのは root だけです。',
+      '誤り。未接続の親に addNestedSub しても例外にはならず、親を接続するだけです。'
+    ],
+    [
+      '誤り。すぐに流すのは「自分の props が変わらなかった」ときだけです。変わったときに流すと、子は古い wrapper props のまま走ってしまいます。',
+      '誤り。スキップはしません。コミット後に必ず流します。その子孫の中に、この connect を経由してしか通知を受けない別の connect や useSelector がいるからです。',
+      '正解！ renderIsScheduled を立てて停止し、captureWrapperProps（layout エフェクト）の中で childPropsFromStoreUpdate を確認してから notifyNestedSubs() を呼びます。',
+      '誤り。v9 の batch は defaultNoopBatch で、コールバックを呼ぶだけです。順序制御は batch ではなく「通知を遅らせる」ことで実現しています。'
+    ],
+    [
+      '正解！ isSubscribed() が返すのは selfSubscribed だけです。子が addNestedSub で残っていれば subscriptionsAmount ≥ 1 なので、親との接続は維持されます（実測 3）。',
+      '誤り。isSubscribed() は「自分自身として」購読しているかを返すだけで、子のための接続は反映しません。',
+      '誤り。listeners.clear() が走るのは subscriptionsAmount が 0 になったときだけです。',
+      '誤り。接続状態は同期的に決まります。dispatch とは無関係です。'
+    ],
+    [
+      '誤り。useSelector は createSubscription を呼ばず、Context Provider も描画できません。入れ子を作れるのは connect だけです。',
+      '誤り。useSelector は store.subscribe ではなく、Context の subscription.addNestedSub を uSES に渡しています。',
+      '誤り。useSelector を呼ぶたびに、それぞれ別のリスナーとして addNestedSub されます。',
+      '正解！ フックだけのツリーでは、すべての useSelector が root の addNestedSub に登録されます。そのため深さ順が保証されず、stale props や zombie child が起こりえます。'
+    ],
+    [
+      '誤り。アンマウントは確定していましたが、useSelector の購読解除は passive エフェクトの cleanup です。connect の layout エフェクトからの通知のほうが先に届きました。',
+      '正解！ 順序（親の mapState → commit → 子へ通知）は守られました。しかし子のリスナーはまだリストに残っていたため、セレクタは一度だけ走って例外を投げ、uSES がそれを握りつぶしました。リポジトリのテストも sawInconsistentState=true を期待値にしています。',
+      '誤り。それは hooks だけの場合（図 B）の順序です。また、どちらの場合も例外でテストは落ちませんでした。',
+      '誤り。子の useSelector は store.getState() から最新の state を読みます。connect が古い state を渡すことはありません。'
+    ]
+  ];
+  var answered = 0, correct = 0;
+  document.querySelectorAll('.q').forEach(function (q, qi) {
+    var ans = Number(q.getAttribute('data-answer'));
+    var buttons = q.querySelectorAll('.opts button');
+    var fb = q.querySelector('.fb');
+    var done = false;
+    buttons.forEach(function (b, bi) {
+      b.addEventListener('click', function () {
+        buttons.forEach(function (x) { x.classList.remove('correct', 'wrong'); });
+        var ok = bi === ans;
+        b.classList.add(ok ? 'correct' : 'wrong');
+        if (!ok) buttons[ans].classList.add('correct');
+        fb.className = 'fb show ' + (ok ? 'ok' : 'ng');
+        fb.textContent = feedback[qi][bi];
+        if (!done) {
+          done = true; answered++;
+          if (ok) correct++;
+          document.getElementById('score').textContent = correct + ' / 5（回答 ' + answered + ' 問）';
+        }
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
