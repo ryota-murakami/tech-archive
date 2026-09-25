@@ -12,7 +12,7 @@ related_targets: ["site/styles.css","site/app.js"]
 - Audience: the archive owner returning to find a previously written explainer.
 - Job: recognize the right article and open its original HTML page quickly.
 - Required content: real article titles, excerpts, dates, subjects, tags, result count, and direct links.
-- Constraints: preserve search, category, calendar/date, pagination, URL state, accessibility, dark mode, reduced motion, and relative-path static hosting compatibility.
+- Constraints: preserve search, category, calendar/date, pagination, URL state, accessibility, dark mode, reduced motion, and GitHub Pages subpath compatibility.
 
 ## Direction contract
 

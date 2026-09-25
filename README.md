@@ -1,6 +1,6 @@
 # Tech Archive
 
-Tech Archive publishes standalone technical HTML explainers as a searchable, filterable private catalog, served by Cloudflare Workers behind Cloudflare Access. Drop an HTML file into `site/articles/`; the build script discovers it and regenerates `site/data/articles.json` for the home page.
+Tech Archive publishes standalone technical HTML explainers as a searchable, filterable GitHub Pages catalog. Drop an HTML file into `site/articles/`; the build script discovers it and regenerates `site/data/articles.json` for the home page.
 
 ## Quick start
 
@@ -26,7 +26,7 @@ pnpm check  # run tests, then build the production index
 
 1. Add a standalone file anywhere under `site/articles/`; `YYYY-MM-DD-readable-slug.html` is the recommended filename.
 2. Add the metadata below when possible. It improves catalog labels, search results, and calendar filtering, but fallback extraction keeps metadata optional.
-3. Run `pnpm check`, then commit and push to `main`. The deploy workflow rebuilds the index and uploads the entire `site/` directory to Cloudflare.
+3. Run `pnpm check`, then commit and push to `main`. The Pages workflow rebuilds the index and deploys the entire `site/` directory.
 
 No registry file needs to be edited by hand. Non-HTML files are ignored by article discovery.
 
@@ -96,31 +96,23 @@ The generated article `href` is relative to the `site/` root, and its stable `id
 
 ## Independent article HTML
 
-Each article opens as its own document; the catalog does not inject article markup into the home page. Self-contained HTML with inline CSS and JavaScript is the most portable option. Shared assets also work, but reference them with paths relative to the article file so the site keeps working wherever it is served. Avoid root-relative URLs such as `/assets/example.png`.
+Each article opens as its own document; the catalog does not inject article markup into the home page. Self-contained HTML with inline CSS and JavaScript is the most portable option. Shared assets also work, but reference them with paths relative to the article file so the site continues to work under a repository Pages URL such as `/tech-archive/`. Avoid root-relative URLs such as `/assets/example.png`.
 
-In production, Cloudflare answers `articles/example.html` with a redirect to `articles/example`; relative asset paths still resolve because the directory does not change.
+## GitHub Pages setup
 
-## Cloudflare deployment
+1. Push the repository to GitHub with `main` as the default branch.
+2. Open **Settings → Pages**.
+3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+4. Push to `main`, or run **Deploy Tech Archive to GitHub Pages** manually from the **Actions** tab.
+5. Follow the deployment URL shown in the workflow summary. GitHub creates the `github-pages` environment automatically; add environment protection rules if the repository needs an approval gate.
 
-The site is an assets-only Cloudflare Worker configured in `wrangler.jsonc`. Its `workers.dev` hostname is the only entry point (preview URLs are disabled), and Cloudflare Access requires sign-in before any page, article, or `data/articles.json` is served.
-
-One-time setup:
-
-1. Create a Cloudflare API token from the **Edit Cloudflare Workers** template.
-2. Add the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` under **Settings → Secrets and variables → Actions**.
-3. Push to `main`, or run **Deploy Tech Archive to Cloudflare Workers** from the **Actions** tab. The first run creates the `tech-archive` Worker.
-4. In the Cloudflare dashboard, open **Workers & Pages → tech-archive → Settings → Domains & Routes**, select **Enable Cloudflare Access** for `workers.dev`, and choose the **Cloudflare account** policy. Finish the Zero Trust onboarding (team name, Free plan) if the dashboard asks for it. Do not use an **Email domain** policy with a public mail domain such as `gmail.com`; it admits every account on that domain.
-5. Confirm the gate: `curl -sI https://tech-archive.<subdomain>.workers.dev/` must return `302` with a `cloudflareaccess.com` location.
-
-Keep this GitHub repository private too. Access guards only the deployed site, not the article sources in `site/articles/`.
-
-The workflow uses Node.js 24, generates the manifest without installing project dependencies, runs a pinned Wrangler through `npx`, and grants the job read-only repository access. Run `npx wrangler@4.137.0 dev` to preview Cloudflare's asset routing locally.
+The workflow uses Node.js 24, generates the manifest without installing dependencies, preserves `site/.nojekyll`, and grants each job only the GitHub token permissions it needs.
 
 ## Repository structure
 
 ```text
 .
-├── .github/workflows/deploy.yml    # build and Cloudflare Workers deployment
+├── .github/workflows/pages.yml     # build and GitHub Pages deployment
 ├── scripts/
 │   ├── build-article-index.mjs      # HTML discovery and metadata extraction
 │   └── dev-server.mjs               # local static server and file watcher
@@ -129,9 +121,9 @@ The workflow uses Node.js 24, generates the manifest without installing project 
 │   ├── styles.css                   # editorial archive design
 │   ├── app.js                       # search, categories, calendar, pagination
 │   ├── articles/                    # standalone HTML documents
-│   └── data/articles.json           # generated manifest
+│   ├── data/articles.json           # generated manifest
+│   └── .nojekyll                    # serve files without Jekyll processing
 ├── test/                            # Node.js behavior tests
-├── wrangler.jsonc                   # Cloudflare Worker static-assets config
 └── package.json
 ```
 

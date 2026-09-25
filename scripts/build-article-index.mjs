@@ -407,7 +407,7 @@ export function extractArticleMetadata(html, filePath, siteRoot) {
   const explicitQuizCount = normalizeInteger(firstMeta("archive:quiz-count"), 0);
   const relativeHref = path.relative(path.resolve(siteRoot), path.resolve(filePath)).split(path.sep).join("/");
 
-  // Each path segment is encoded so spaces and non-Latin filenames remain valid static-hosting links.
+  // Each path segment is encoded so spaces and non-Latin filenames remain valid GitHub Pages links.
   const href = relativeHref.split("/").map(encodeURIComponent).join("/");
 
   return {

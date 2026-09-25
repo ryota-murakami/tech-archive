@@ -20,12 +20,12 @@ The committed HTML document is both the durable source and the published artifac
 
 ## Operating Context
 
-Articles are written as independently readable HTML documents, committed under `site/articles/`, indexed during build or deployment, and published as a private site on Cloudflare Workers behind Cloudflare Access. Visitors can find entries by title, subject, date, and pagination before opening the original document.
+Articles are written as independently readable HTML documents, committed under `site/articles/`, indexed during build or deployment, and published on GitHub Pages. Visitors can find entries by title, subject, date, and pagination before opening the original document.
 
 ## Capabilities and Constraints
 
 - Preserve title search, subject filtering, date filtering, pagination, URL-owned filter state, and direct links to standalone article pages.
-- Keep the site deployable as static assets with relative URLs, so it works at any base path and needs no server code.
+- Keep the site compatible with static GitHub Pages hosting under the `/tech-archive/` repository path.
 - Treat `site/data/articles.json` as generated output; article files remain the content source.
 - Keep the archive usable across compact mobile and wide desktop viewports, system dark mode, reduced motion, keyboard navigation, and assistive technology.
 
