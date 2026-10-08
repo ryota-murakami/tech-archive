@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="RoundTrippableSchema は、入力が unknown か any なら捨て、そうでなければ出力を入力へ戻せるかを見て、落ちたスキーマを never にする条件型であるという解説。" />
+<meta name="archive:title" content="RoundTrippableSchema の意味" />
+<meta name="archive:published" content="2026-10-08" />
+<meta name="archive:type" content="Explainer" />
+<meta name="archive:source" content="localStorageHandler.ts · RoundTrippableSchema" />
+<meta name="archive:category" content="TypeScript" />
+<meta name="archive:category" content="Zod" />
+<meta name="archive:category" content="Conditional Types" />
+<meta name="archive:reading-minutes" content="16" />
+<meta name="archive:quiz-count" content="5" />
+<meta name="archive:code" content="schema: Schema &amp; RoundTrippableSchema" />
+<title>RoundTrippableSchema の意味</title>
+<style>
+  :root {
+    --ink: #1c1917;
+    --muted: #57534e;
+    --line: #e7e5e4;
+    --paper: #faf7f2;
+    --card: #fffdf8;
+    --accent: #1d4e89;
+    --accent-soft: #e8f0f8;
+    --good: #166534;
+    --good-soft: #ecfdf3;
+    --bad: #9f1239;
+    --bad-soft: #fff1f2;
+    --warn: #92400e;
+    --warn-soft: #fffbeb;
+    --code-bg: #1c1917;
+    --code-fg: #f5f5f4;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Hiragino Mincho ProN", "Yu Mincho", serif;
+    line-height: 1.75;
+    font-size: 18px;
+  }
+  header.hero {
+    background: #14233a;
+    color: #f8fafc;
+    padding: 56px 24px 40px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .kicker {
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: "Avenir Next", "Hiragino Sans", sans-serif;
+    font-size: 12px;
+    color: #93c5fd;
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-size: clamp(32px, 5vw, 46px);
+    line-height: 1.2;
+    font-weight: 600;
+    margin: 0 0 16px;
+  }
+  .lede { font-size: 20px; color: #e2e8f0; margin: 0; }
+  nav.toc {
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  nav.toc .wrap {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    font-family: "Avenir Next", "Hiragino Sans", sans-serif;
+    font-size: 14px;
+  }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  main { padding: 8px 24px 80px; }
+  section { padding-top: 36px; }
+  h2 { font-size: 30px; margin: 0 0 12px; line-height: 1.3; }
+  h3 { font-size: 22px; margin: 28px 0 8px; }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 14px 16px;
+    margin: 20px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.good { border-color: var(--good); background: var(--good-soft); }
+  .callout strong { font-family: "Avenir Next", "Hiragino Sans", sans-serif; }
+  pre, code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 14px;
+  }
+  code { background: #efeae2; padding: 0.1em 0.35em; border-radius: 4px; }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 16px 18px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.55;
+    margin: 12px 0 20px;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+    margin: 12px 0 20px;
+    background: var(--card);
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f3eee6; font-family: "Avenir Next", "Hiragino Sans", sans-serif; }
+  td.yes { color: var(--good); font-weight: 700; }
+  td.no { color: var(--bad); font-weight: 700; }
+  .diagram {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 16px 0 22px;
+  }
+  .diagram-title {
+    font-family: "Avenir Next", "Hiragino Sans", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .doors { display: grid; gap: 10px; }
+  .door {
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-family: "Avenir Next", "Hiragino Sans", sans-serif;
+    font-size: 15px;
+  }
+  .door strong { display: block; margin-bottom: 4px; }
+  .door.ask { background: #f8fafc; border: 1px solid #cbd5e1; }
+  .door.stop { background: var(--bad-soft); border: 1px solid #fecdd3; }
+  .door.go { background: var(--good-soft); border: 1px solid #bbf7d0; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card {
+    border-radius: 10px;
+    padding: 12px;
+    font-family: "Avenir Next", "Hiragino Sans", sans-serif;
+    font-size: 14px;
+  }
+  .card h4 { margin: 0 0 8px; font-size: 15px; }
+  .card.bad { background: var(--bad-soft); }
+  .card.good { background: var(--good-soft); }
+  .card ol, .card ul { margin: 0; padding-left: 18px; }
+  .q {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 16px 0;
+  }
+  .q h3 { margin-top: 0; }
+  .choices { display: grid; gap: 8px; }
+  .choices button {
+    text-align: left;
+    background: #fff;
+    border: 1px solid #d6d3d1;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .choices button:hover { border-color: var(--accent); }
+  .choices button.correct { background: var(--good-soft); border-color: var(--good); }
+  .choices button.wrong { background: var(--bad-soft); border-color: var(--bad); }
+  .feedback { margin-top: 10px; font-size: 16px; display: none; }
+  .feedback.show { display: block; }
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 24px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  @media (max-width: 700px) {
+    body { font-size: 17px; }
+    .pair { grid-template-columns: 1fr; }
+    table { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">TypeScript conditional type</p>
+    <h1>この型は「同じ型か」を見ていない</h1>
+    <p class="lede"><code>RoundTrippableSchema</code> は、スキーマを二つの問いでふるいにかける。入力が <code>unknown</code> か <code>any</code> なら捨てる。そうでなければ、出力を入力に渡せるかを見る。通ったスキーマはそのまま残り、落ちたスキーマは <code>never</code> になって、関数の引数に渡せなくなる。</p>
+  </div>
+</header>
+<nav class="toc">
+  <div class="wrap">
+    <a href="#background">Background</a>
+    <a href="#intuition">Intuition</a>
+    <a href="#mechanics">Mechanics</a>
+    <a href="#codebase">In this codebase</a>
+    <a href="#quiz">Quiz</a>
+  </div>
+</nav>
+<main>
+<div class="wrap">
+
+<section id="background">
+  <h2>Background</h2>
+  <p>先に、この型が立っている地面を二つだけ敷く。条件型の読み方と、Zod が「入る型」と「出る型」を分けていること。どちらも知っている人は Intuition へ進んでよい。</p>
+
+  <h3>条件型の extends は代入できるか、という問い</h3>
+  <p>TypeScript の条件型は <code>SomeType extends OtherType ? TrueType : FalseType</code> と書く。JavaScript の三項演算子に見えるが、実行時には消える。残るのは型だけだ。左の型が右の型へ代入できるとき真の枝、できないとき偽の枝を選ぶ。公式ハンドブックの言い方はそのまま「assignable」である（<a href="https://www.typescriptlang.org/docs/handbook/2/conditional-types.html">Conditional Types</a>）。</p>
+<pre><code>type Example1 = Dog extends Animal ? number : string; // number
+type Example2 = RegExp extends Animal ? number : string; // string</code></pre>
+  <p>ここでの <code>extends</code> は「クラスの継承」ではない。<code>number extends number | string</code> は真になる。数は「数または文字列」に代入できるからだ。逆の <code>number | string extends number</code> は偽になる。文字列が混ざった値を、数だけの場所には置けない。</p>
+  <p>分配（distributive）になるのは、検査される側が裸の型引数のときだけだ。<code>T extends U ? X : Y</code> に <code>string | number</code> を入れると、メンバーごとに計算して結果を足し直す。左右を <code>[T] extends [U]</code> のようにタプルで包むと、その分配は止まる（同じハンドブックの Distributive Conditional Types）。今回の型の左側は <code>unknown</code> と <code>z.output&lt;Schema&gt;</code> であり、裸の <code>Schema</code> ではない。</p>
+
+  <div class="callout">
+    <strong>unknown は、自分自身と any にしか代入できない</strong>
+    TypeScript 3.0 で入った <code>unknown</code> は、あらゆる値を受け取れる頂上の型だ。ただし <code>unknown</code> 自体を他の型の変数に入れることは、<code>unknown</code> と <code>any</code> 以外ではできない（<a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3.0.html#new-unknown-top-type">TS 3.0 release notes</a>）。だから <code>unknown extends T</code> は、「T は <code>unknown</code> か <code>any</code> か」という検査になる。逆向きの <code>T extends unknown</code> は、T が何であっても真になる。何でも <code>unknown</code> に入るからだ。
+  </div>
+
+  <h3>Zod は入力と出力を別の型として持っている</h3>
+  <p>このリポジトリの Zod は 4.6.2 だ。スキーマの土台は <code>ZodType&lt;Output = unknown, Input = unknown&gt;</code> で、出力も入力も初期値は <code>unknown</code> である（<code>node_modules/zod/v4/classic/schemas.d.ts</code> の 7 行目）。取り出すユーティリティは次のとおりで、定義は <code>node_modules/zod/v4/core/core.d.ts</code> の 53–63 行にある。<code>z.infer</code> は出力の別名だ。</p>
+<pre><code>export type input&lt;T&gt; = T extends { _zod: { input: any } }
+  ? T["_zod"]["input"]
+  : unknown;
+export type output&lt;T&gt; = T extends { _zod: { output: any } }
+  ? T["_zod"]["output"]
+  : unknown;
+export type { output as infer };</code></pre>
+  <p>変換がないスキーマでは、二つは同じ型になる。<code>z.string()</code> の入力も出力も <code>string</code> だ。変換があると割れる。公式の例は <code>z.string().transform((val) =&gt; val.length)</code> で、入力は <code>string</code>、出力は <code>number</code> である（<a href="https://zod.dev/basics">zod.dev/basics</a>）。<code>z.coerce.number()</code> の入力は、型引数を付けなければ <code>unknown</code>、出力は <code>number</code> だ。<code>z.coerce.number&lt;number&gt;()</code> と書くと入力も <code>number</code> に狭まる（<a href="https://zod.dev/api">zod.dev/api</a>、この環境の 4.6.2 で同じ結果を確認した）。</p>
+  <p><code>get</code> が返すのは出力、<code>set</code> が受け取るのは入力、という対応が、この型の存在理由になる。読んだ値を、もう一度書けるか。それが「往復できる」の中身だ。</p>
+</section>
+
+<section id="intuition">
+  <h2>Intuition</h2>
+  <p>関数の引数はこうなっている。</p>
+<pre><code>schema: Schema &amp; RoundTrippableSchema&lt;Schema&gt;</code></pre>
+  <p><code>Schema</code> は、渡したスキーマから推論される。その横に、同じ <code>Schema</code> を条件型に通した結果を交差で重ねる。条件型が <code>Schema</code> 自身を返せば、交差はスキーマのまま残る。条件型が <code>never</code> を返せば、交差は <code>never</code> になる。<code>never</code> には何も代入できないので、その呼び出しはコンパイルエラーになる。エラーメッセージは「<code>never</code> に代入できない」であり、「往復できません」とは書かない。ふるいは型の底に穴を開けて、落ちた引数をそこへ落とす。</p>
+
+  <div class="diagram">
+    <p class="diagram-title">二つの扉 — 通れば Schema、落ちれば never</p>
+    <div class="doors">
+      <div class="door ask">
+        <strong>扉 1　unknown extends z.input&lt;Schema&gt;</strong>
+        入力は unknown か any か。真なら never。set が何でも受けてしまうスキーマをここで止める。
+      </div>
+      <div class="door ask">
+        <strong>扉 2　z.output&lt;Schema&gt; extends z.input&lt;Schema&gt;</strong>
+        出力は入力に代入できるか。偽なら never。get の結果を set に渡せないスキーマをここで止める。
+      </div>
+      <div class="door go">
+        <strong>両方を抜けたら Schema</strong>
+        交差しても型は変わらない。呼び出しは通る。
+      </div>
+      <div class="door stop">
+        <strong>どちらかで落ちたら never</strong>
+        Schema &amp; never は never。引数の位置が never になり、実スキーマはそこに乗らない。
+      </div>
+    </div>
+  </div>
+
+  <p>おもちゃで、扉の仕事が違うことを見る。どちらも「入力と出力が違う」が、止まる扉は別だ。</p>
+
+  <div class="diagram">
+    <p class="diagram-title">同じ「型が違う」でも、止まっている扉が違う</p>
+    <div class="pair">
+      <div class="card bad">
+        <h4>z.coerce.number()</h4>
+        <ul>
+          <li>入力 unknown、出力 number</li>
+          <li>扉 1 が真なので never</li>
+          <li>扉 2 だけなら通る。number は unknown に入る</li>
+        </ul>
+      </div>
+      <div class="card bad">
+        <h4>z.string().transform(Number)</h4>
+        <ul>
+          <li>入力 string、出力 number</li>
+          <li>扉 1 は偽。入力は string であって unknown ではない</li>
+          <li>扉 2 が偽。number は string に入らない</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p>通る変換もある。<code>z.union([z.number(), z.string()]).transform(Number)</code> の出力は <code>number</code>、入力は <code>number | string</code> だ。数は「数または文字列」に代入できる。<code>get</code> が返した <code>5</code> を、<code>set</code> に戻せる。文字列から数への変換そのものが禁止されているわけではない。</p>
+  <p>ソースの直前コメントは「入力と出力が同じ型のスキーマのみ」と書いている。測定すると、その説明には余白がある。<code>z.string().default("x")</code> の入力は <code>string | undefined</code>、出力は <code>string</code> で、同じではない。それでも <code>string</code> は <code>string | undefined</code> に入るので、この型は受け付ける。見ているのは同一性ではなく、出力から入力への代入だ。</p>
+</section>
+
+<section id="mechanics">
+  <h2>Mechanics</h2>
+  <p>以下の表は、このリポジトリの TypeScript 6.0.3 と Zod 4.6.2 で、コンパイラ API の <code>typeToString</code> に型を渡して読んだ結果だ。条件型の定義はソースの複製ではなく、読み取り対象の式そのものを評価している。</p>
+
+  <h3>扉 1 は「入力が頂上型か」</h3>
+  <p>式は <code>unknown extends z.input&lt;Schema&gt;</code>。測定した素の関係はこうだった。</p>
+  <table>
+    <thead><tr><th>検査</th><th>結果</th></tr></thead>
+    <tbody>
+      <tr><td><code>unknown extends unknown</code></td><td class="yes">yes</td></tr>
+      <tr><td><code>unknown extends any</code></td><td class="yes">yes</td></tr>
+      <tr><td><code>unknown extends string</code></td><td class="no">no</td></tr>
+      <tr><td><code>string extends unknown</code></td><td class="yes">yes（何でも真なので、この向きはふるいにならない）</td></tr>
+    </tbody>
+  </table>
+  <p>だから <code>z.unknown()</code> も <code>z.any()</code> も扉 1 で落ちる。ここが無いと、扉 2 だけではどちらも通る。測定では、扉 2 だけを <code>z.output extends z.input</code> として適用すると、<code>z.any()</code> も <code>z.unknown()</code> も <code>z.coerce.number()</code> も真の枝になった。coerce の出力 <code>number</code> は、入力 <code>unknown</code> に代入できる。幅が広すぎる入力を止める仕事は、扉 1 にしかない。</p>
+  <p><code>z.coerce.number&lt;number&gt;()</code> は入力が <code>number</code> なので扉 1 を通る。出力も <code>number</code> なので扉 2 も通り、結果は受理だった。コメントが「coerce を使うと弾く」と読める箇所は、型引数なしの初期入力 <code>unknown</code> の話だ。入力をピンした coerce は、この型は止めない。</p>
+  <p><code>z.preprocess</code> も同じ構造で、第二型引数の初期値は <code>unknown</code> である（<code>schemas.d.ts</code> 818 行、<code>ZodPreprocess&lt;B, I = unknown&gt;</code> は 719 行）。<code>(value: unknown) =&gt; value</code> を渡すと入力は <code>unknown</code> のまま落ちる。<code>(value: string) =&gt; value.trim()</code> のように引数を <code>string</code> へ注釈すると、入力も出力も <code>string</code> になり、受理された。</p>
+
+  <div class="callout warn">
+    <strong>any を条件型の左に置くと、両枝が混ざることがある</strong>
+    測定では <code>any extends string ? "yes" : "no"</code> が <code>"yes" | "no"</code> になった。一方 <code>any extends any</code> を同じ形で聞くと、真の枝だけが残った。扉 2 が <code>z.any()</code> を通してしまうのは、この「両枝ユニオン」のせいではなく、頂上型どうしの代入が真になるせいだ。いずれにせよ扉 1 が先に <code>never</code> へ落とす。
+  </div>
+
+  <h3>扉 2 は「読んだ値を、もう一度書けるか」</h3>
+  <p>式は <code>z.output&lt;Schema&gt; extends z.input&lt;Schema&gt;</code>。真なら <code>Schema</code>、偽なら <code>never</code>。返しているのは <code>true</code> ではない。スキーマ型そのものだ。ここは後で交差の話に戻る。</p>
+  <p><code>z.string().transform(Number)</code> は、出力 <code>number</code> が入力 <code>string</code> に入らないので落ちる。オブジェクトで包んでも同じで、<code>{ page: number }</code> は <code>{ page: string }</code> に入らない。測定したエラーは次の形だった。シグネチャをこの型のまま複製し、同じ TypeScript で <code>tsc</code> にかけた結果である。</p>
+<pre><code>error TS2345: Argument of type
+  'ZodObject&lt;{ page: ZodPipe&lt;ZodString, ZodTransform&lt;number, string&gt;&gt; }, $strip&gt;'
+  is not assignable to parameter of type 'never'.</code></pre>
+  <p><code>z.coerce.number()</code> は <code>ZodCoercedNumber&lt;unknown&gt;</code>、<code>z.any()</code> は <code>ZodAny</code>、<code>z.preprocess(..., unknown)</code> は <code>ZodPreprocess&lt;ZodString, unknown&gt;</code> として、同じ「<code>never</code> に代入できない」で止まった。</p>
+
+  <h3>測定したスキーマ</h3>
+  <table>
+    <thead>
+      <tr><th>スキーマ</th><th>input</th><th>output</th><th>判定</th><th>止めた扉</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>z.string()</code></td><td>string</td><td>string</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.enum(["japanese","english"])</code></td><td>"japanese" | "english"</td><td>同じ</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.string().optional()</code></td><td>string | undefined</td><td>同じ</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.string().nullable()</code></td><td>string | null</td><td>同じ</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.string().default("x")</code></td><td>string | undefined</td><td>string</td><td class="yes">accepted</td><td>なし。出力の方が狭い</td></tr>
+      <tr><td><code>z.string().catch("x")</code></td><td>string</td><td>string</td><td class="yes">accepted</td><td>型の上では同じ。実行時の catch はこの型からは見えない</td></tr>
+      <tr><td><code>z.union([z.number(), z.string()]).transform(Number)</code></td><td>string | number</td><td>number</td><td class="yes">accepted</td><td>なし。number は入力に含まれる</td></tr>
+      <tr><td><code>z.object({ page: その union })</code></td><td>{ page: string | number }</td><td>{ page: number }</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.object({ name: z.string() }).transform(v =&gt; ({ ...v, length }))</code></td><td>{ name: string }</td><td>{ name: string; length: number }</td><td class="yes">accepted</td><td>なし。余分なプロパティは代入を妨げない</td></tr>
+      <tr><td><code>z.coerce.number&lt;number&gt;()</code></td><td>number</td><td>number</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.preprocess((value: string) =&gt; value.trim(), z.string())</code></td><td>string</td><td>string</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.date()</code></td><td>Date</td><td>Date</td><td class="yes">accepted</td><td>なし。JSON 往復は別問題</td></tr>
+      <tr><td><code>z.iso.datetime()</code></td><td>string</td><td>string</td><td class="yes">accepted</td><td>なし</td></tr>
+      <tr><td><code>z.string().transform(Number)</code></td><td>string</td><td>number</td><td class="no">rejected</td><td>扉 2</td></tr>
+      <tr><td><code>z.object({ page: z.string().transform(Number) })</code></td><td>{ page: string }</td><td>{ page: number }</td><td class="no">rejected</td><td>扉 2</td></tr>
+      <tr><td><code>z.coerce.number()</code></td><td>unknown</td><td>number</td><td class="no">rejected</td><td>扉 1。扉 2 は通る</td></tr>
+      <tr><td><code>z.preprocess((value: unknown) =&gt; value, z.string())</code></td><td>unknown</td><td>string</td><td class="no">rejected</td><td>扉 1</td></tr>
+      <tr><td><code>z.any()</code></td><td>any</td><td>any</td><td class="no">rejected</td><td>扉 1</td></tr>
+      <tr><td><code>z.unknown()</code></td><td>unknown</td><td>unknown</td><td class="no">rejected</td><td>扉 1</td></tr>
+    </tbody>
+  </table>
+
+  <h3>真の枝が Schema を返す理由</h3>
+  <p>交差の相手が <code>true</code> だと、通ったスキーマまで落ちる。測定では <code>z.ZodString &amp; true</code> は <code>never</code> に簡約されなかったが、<code>z.ZodString</code> はその交差へ代入できなかった（<code>"not assignable"</code>）。つまり真の枝を <code>true</code> にすると、健全な <code>z.string()</code> まで引数に乗れなくなる。</p>
+  <p>真の枝が <code>Schema</code> なら、<code>typeof stringSchema &amp; typeof stringSchema</code> は <code>z.ZodString</code> のまま残った。偽の枝の <code>never</code> は、<code>typeof stringSchema &amp; never</code> を <code>never</code> に潰した。受理は恒等、拒否は底、という交差のための戻り値だ。</p>
+
+  <div class="callout">
+    <strong>定義</strong>
+    <code>Schema &amp; RoundTrippableSchema&lt;Schema&gt;</code> は、推論で具体スキーマを掴んでから、そのスキーマに条件を掛ける書き方だ。条件を先に制約位置へ置くと、まだ決まっていない <code>Schema</code> を条件型が参照して推論が回りにくくなる。引数の交差は、推論のあとで穴を開ける。
+  </div>
+
+  <h3>この型が見ないもの</h3>
+  <p><code>z.date()</code> は入力も出力も <code>Date</code> なので、この型は受理する。JSON は別だ。この環境で <code>JSON.stringify({ at: new Date("2026-10-05T00:00:00+09:00") })</code> は <code>{"at":"2026-10-04T15:00:00.000Z"}</code> になり、<code>JSON.parse</code> した <code>at</code> の <code>typeof</code> は <code>"string"</code> だった。<code>z.object({ at: z.date() }).safeParse</code> はその値を拒否した。<code>z.union([z.date(), z.iso.datetime()])</code> に <code>new Date(value)</code> を噛ませたスキーマは通り、<code>at</code> は <code>Date</code> に戻った。型が保証するのは「出力の型が入力の型に入る」ことまでで、JSON にしたあとの形までは見ない。</p>
+  <p>もう一つ、条件型は分配していない。単独では落ちる <code>z.string().transform(Number)</code> と、通る <code>z.number()</code> をユニオンにした型は、測定では受理だった。入力は <code>string | number</code>、出力は <code>number</code>、<code>number extends string | number</code> が真になる。メンバーごとに扉を通しているのではなく、ユニオンを一つの型として見ている。呼び出しの推論は通常、渡した一つのスキーマ式の型になるので、この穴は「スキーマのユニオン型を変数に入れて渡したとき」に開く。</p>
+  <p>フィールドを足す transform も通った。<code>{ name: string; length: number }</code> は <code>{ name: string }</code> に代入できる。構造的型付けでは、余分なプロパティがあっても <code>extends</code> は真になる。これは <code>get</code> の結果を <code>set</code> に渡せる、という検査の帰結でもある。</p>
+</section>
+
+<section id="codebase">
+  <h2>In this codebase</h2>
+  <p>定義は <code>src/functions/localStorageHandler.ts</code> の 256–261 行にある。直前のコメントは 254–255 行で、「入力と出力が同じ型だけに限定する」「<code>z.coerce</code> / <code>z.preprocess</code> は異なる型になるので <code>never</code> で弾く」とある。測定と突き合わせると、コメントは意図の要約で、式そのものより狭い。式は同一性ではなく二段の代入検査で、coerce を止めるのは「型が異なるから」ではなく「初期入力が <code>unknown</code> だから」だ。</p>
+<pre><code>type RoundTrippableSchema&lt;Schema extends z.ZodType&gt; =
+  unknown extends z.input&lt;Schema&gt;
+    ? never
+    : z.output&lt;Schema&gt; extends z.input&lt;Schema&gt;
+      ? Schema
+      : never;</code></pre>
+  <p>使われるのは 266–268 行の <code>defineObjectStorage</code> だけだ。<code>get</code> の戻り値は <code>z.output&lt;Schema&gt; | undefined</code>（272 行）、<code>set</code> の引数は <code>z.input&lt;Schema&gt;</code>（302 行）。条件型は、その二つの型のあいだに「出力を入力へ戻せる」を要求する。保存前の JSON 往復は型ではなく 300–319 行の <code>set</code> が実行時に行う。そこで <code>z.date()</code> のような、型は通るが JSON にすると文字列になる値が落とされる。</p>
+  <p>型だけの検査は <code>src/functions/localStorageHandler.spec.ts</code> の 12–22 行にある。<code>@ts-expect-error</code> が二つある。</p>
+  <ul>
+    <li><code>z.object({ page: z.string().transform(Number) })</code> — 扉 2。コメントは「出力 number を入力 string に戻せない」。</li>
+    <li><code>z.coerce.number()</code> — 扉 1。コメントは「入力が unknown になり set が何でも通る」。</li>
+  </ul>
+  <p>同じファイルの実行時テストは、型が通す <code>z.union([z.number(), z.string()]).transform(Number)</code> と、型が通す <code>z.date()</code> を両方置いている。前者は保存して読める。後者は <code>set</code> が保存を拒否する。型と実行時の分業が、テストの配置に出ている。</p>
+  <p>最初の本番スキーマは <code>src/functions/local_storage/newCompanySettingStorage.ts</code> だ。<code>z.enum(LOCALE_MASTER_IDS)</code> のように、入力と出力が同じ列挙のオブジェクトだけを渡している。測定した <code>z.enum(["japanese", "english"])</code> と同じ形で、両方の扉を素通りする。</p>
+</section>
+
+<section id="quiz">
+  <h2>Quiz</h2>
+  <p>五問。Mechanics で測ったことに答えがある。</p>
+
+  <div class="q">
+    <h3>1. z.coerce.number() をこの型が never にするのは、どの検査か？</h3>
+    <div class="choices">
+      <button data-correct="false">扉 2。出力 number が入力 unknown に代入できないから</button>
+      <button data-correct="true">扉 1。入力が unknown なので、unknown extends 入力 が真になるから</button>
+      <button data-correct="false">両方。coerce は常に二つの扉で落ちる</button>
+      <button data-correct="false">どちらでもない。Zod が coerce を特別な禁止リストに入れている</button>
+    </div>
+    <p class="feedback" data-ok="合っている。扉 2 だけだと number extends unknown が真で通る。止めるのは扉 1 だ。z.coerce.number&lt;number&gt;() は入力が number なので、この型は受理する。" data-ng="扉 2 は通る。number は unknown に代入できる。落ちるのは扉 1 で、入力が unknown だからだ。"></p>
+  </div>
+
+  <div class="q">
+    <h3>2. z.string().transform(Number) が落ちて、z.union([z.number(), z.string()]).transform(Number) が通るのはなぜ？</h3>
+    <div class="choices">
+      <button data-correct="false">union は transform を型から消すから</button>
+      <button data-correct="true">前者の出力 number は入力 string に入らない。後者の出力 number は入力 number | string に入る</button>
+      <button data-correct="false">前者は扉 1、後者は扉 2 で、union は unknown を消すから</button>
+      <button data-correct="false">transform の出力が number のスキーマは、object で包んだときだけ落ちる</button>
+    </div>
+    <p class="feedback" data-ok="合っている。どちらも扉 1 は通る。違いは扉 2 の代入先が string か、number | string かだ。" data-ng="両方とも入力は unknown ではない。差は扉 2 で、number を string に入れられるか、number | string に入れられるかだ。"></p>
+  </div>
+
+  <div class="q">
+    <h3>3. 真の枝が true ではなく Schema を返すのはなぜ？</h3>
+    <div class="choices">
+      <button data-correct="false">true は条件型の真の枝に書けないから</button>
+      <button data-correct="true">z.ZodString は z.ZodString &amp; true に代入できない。Schema を返すと、通った交差はスキーマのまま残る</button>
+      <button data-correct="false">true を返すと never との区別がつき、エラーメッセージが分かりやすくなるから</button>
+      <button data-correct="false">Schema を返すと、出力の型が入力の型に書き換えられるから</button>
+    </div>
+    <p class="feedback" data-ok="合っている。偽の枝の never は Schema &amp; never を never に潰す。真の枝の Schema は交差しても同じスキーマだ。" data-ng="測定では ZodString は ZodString &amp; true に代入できなかった。真の枝を true にすると、通したいスキーマまで引数に乗らない。"></p>
+  </div>
+
+  <div class="q">
+    <h3>4. z.string().default("x") の入力は string | undefined、出力は string だ。この型はどう扱う？</h3>
+    <div class="choices">
+      <button data-correct="false">異なる型なので never にする。コメントどおり同一型だけを通す</button>
+      <button data-correct="true">受理する。出力 string は入力 string | undefined に代入できる</button>
+      <button data-correct="false">扉 1 で落とす。undefined が含まれる入力は unknown 扱いになる</button>
+      <button data-correct="false">default は出力を undefined に広げるので、扉 2 で落ちる</button>
+    </div>
+    <p class="feedback" data-ok="合っている。検査は同一性ではない。狭い出力を広い入力へ戻せるなら通る。" data-ng="測定の判定は accepted だった。string extends string | undefined は真で、undefined は unknown ではない。"></p>
+  </div>
+
+  <div class="q">
+    <h3>5. z.date() はこの型を通る。そのあと set が Date の保存を拒否するのは、型のどの限界か？</h3>
+    <div class="choices">
+      <button data-correct="false">扉 2 が Date を never にしているのに、set の引数型がそれを無視している</button>
+      <button data-correct="true">入力も出力も Date なので扉は通る。JSON.stringify が Date を文字列にすることは、この型には現れない</button>
+      <button data-correct="false">z.date() の入力は unknown だが、扉 1 にバグがあって通している</button>
+      <button data-correct="false">transform が無いスキーマは条件型の対象外で、実行時だけが検査する</button>
+    </div>
+    <p class="feedback" data-ok="合っている。測定では z.date() は accepted、JSON にした at は string で、z.date() の safeParse は失敗した。JSON の検査は set の実行時にある。" data-ng="型の判定は accepted で、入力も出力も Date だった。落ちるのは JSON にしたあとで、その事実は条件型の外にある。"></p>
+  </div>
+</section>
+
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    測定環境は TypeScript 6.0.3、Zod 4.6.2（このリポジトリの node_modules）。条件型の代入規則は TypeScript Handbook、Zod の入出力は zod.dev とインストール済みの <code>.d.ts</code>。2026-10-08。
+  </div>
+</footer>
+<script>
+  document.querySelectorAll(".q").forEach((card) => {
+    const feedback = card.querySelector(".feedback");
+    card.querySelectorAll("button").forEach((button) => {
+      button.addEventListener("click", () => {
+        card.querySelectorAll("button").forEach((other) => {
+          other.classList.remove("correct", "wrong");
+          other.disabled = true;
+        });
+        const ok = button.dataset.correct === "true";
+        button.classList.add(ok ? "correct" : "wrong");
+        if (!ok) {
+          const answer = card.querySelector('button[data-correct="true"]');
+          if (answer) answer.classList.add("correct");
+        }
+        feedback.textContent = ok ? feedback.dataset.ok : feedback.dataset.ng;
+        feedback.classList.add("show");
+      });
+    });
+  });
+</script>
+</body>
+</html>
