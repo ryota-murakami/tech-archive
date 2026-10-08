@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="CSS Anchor Positioning の主要機能を、実際に動くデモとコードで段階的に学ぶハンズオン。" />
+<meta name="archive:title" content="CSS Anchor Positioning ハンズオン — 要素を要素につなぐ" />
+<meta name="archive:published" content="2026-07-29" />
+<meta name="archive:type" content="Hands-on Guide" />
+<meta name="archive:source" content="MDN Web Docs · CSS anchor positioning" />
+<meta name="archive:category" content="CSS" />
+<meta name="archive:category" content="Web Platform" />
+<meta name="archive:category" content="Frontend" />
+<meta name="archive:code" content="anchor-name: --tip; position-anchor: --tip;" />
+<title>CSS Anchor Positioning ハンズオン — 要素を要素につなぐ</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Design tokens
+   アンカー = 琥珀 / 位置指定要素 = シアン。
+   この2色だけがページ全体で「意味」を持つ。他は全部無彩色。
+   ============================================================ */
+:root{
+  --bg:        #0A1420;
+  --surface:   #101E2C;
+  --surface-2: #15283A;
+  --line:      #22405A;
+  --line-soft: #1A3048;
+
+  --anchor:    #FFB02E;   /* アンカー要素 */
+  --anchor-dim:#4A3A1C;
+  --pos:       #57D2F0;   /* アンカー位置指定要素 */
+  --pos-dim:   #143A48;
+
+  --text:      #DEE9F2;
+  --muted:     #7E9BB4;
+  --dim:       #4F6C85;
+  --ok:        #74E0A6;
+  --warn:      #FF8A76;
+
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --disp: "Space Grotesk", "Zen Kaku Gothic New", sans-serif;
+  --body: "Zen Kaku Gothic New", "Space Grotesk", sans-serif;
+
+  --r: 4px;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+
+html{ scroll-behavior:smooth; }
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior:auto; }
+  *{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+
+body{
+  margin:0;
+  background:var(--bg);
+  /* 製図板のグリッド */
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 48px 48px, 48px 48px;
+  background-position: -1px -1px;
+  color:var(--text);
+  font-family:var(--body);
+  font-size:15px;
+  line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{ max-width:1080px; margin:0 auto; padding:0 20px 120px; }
+
+/* ---------- masthead ---------- */
+.masthead{ padding:72px 0 40px; border-bottom:1px solid var(--line); margin-bottom:8px; }
+.eyebrow{
+  font-family:var(--mono); font-size:11px; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--dim); margin:0 0 20px;
+}
+h1{
+  font-family:var(--disp); font-weight:700; font-size:clamp(34px,6vw,60px);
+  line-height:1.06; letter-spacing:-.02em; margin:0 0 8px;
+}
+h1 .amber{ color:var(--anchor); }
+h1 .cyan{ color:var(--pos); }
+.lead{ max-width:60ch; color:var(--muted); margin:20px 0 0; font-size:16px; }
+.lead code{ color:var(--text); }
+
+/* 対応状況バッジ */
+.support{
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:28px;
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
+}
+.chip{
+  border:1px solid var(--line); border-radius:99px; padding:4px 12px;
+  color:var(--muted); background:var(--surface);
+}
+.chip[data-state="yes"]{ border-color:#2E6B4E; color:var(--ok); }
+.chip[data-state="no"]{ border-color:#6B3229; color:var(--warn); }
+
+/* ---------- 目次 ---------- */
+.toc{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+  gap:1px; background:var(--line); border:1px solid var(--line);
+  margin:40px 0 0;
+}
+.toc a{
+  display:block; padding:14px 16px; background:var(--bg);
+  color:var(--muted); text-decoration:none; font-size:13.5px; transition:.15s;
+}
+.toc a:hover, .toc a:focus-visible{ background:var(--surface-2); color:var(--pos); }
+.toc a b{
+  display:block; font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+  color:var(--dim); font-weight:400; margin-bottom:2px;
+}
+
+/* ---------- plate（各機能の解説ユニット）---------- */
+.plate{ padding-top:88px; }
+.plate > header{ margin-bottom:24px; }
+.tag{
+  font-family:var(--mono); font-size:11px; letter-spacing:.16em; color:var(--anchor);
+  text-transform:uppercase; display:block; margin-bottom:10px;
+}
+h2{
+  font-family:var(--disp); font-weight:700; font-size:clamp(22px,3.2vw,30px);
+  letter-spacing:-.01em; margin:0 0 12px; line-height:1.25;
+}
+h3{ font-size:16px; margin:36px 0 10px; font-weight:700; }
+.plate p{ max-width:66ch; color:var(--muted); margin:0 0 14px; }
+.plate p strong{ color:var(--text); font-weight:500; }
+code{ font-family:var(--mono); font-size:.88em; color:var(--pos); }
+p code, li code, td code{ background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+
+ul.notes{ max-width:66ch; color:var(--muted); padding-left:1.1em; margin:0 0 16px; }
+ul.notes li{ margin-bottom:6px; }
+
+/* ---------- デモ台 ---------- */
+.demo{
+  border:1px solid var(--line); background:var(--surface);
+  margin:22px 0 0;
+}
+.demo-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  flex-wrap:wrap; padding:10px 14px; border-bottom:1px solid var(--line);
+  font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--dim);
+}
+.stage{
+  position:relative;                 /* ← 位置指定要素の包含ブロック */
+  min-height:300px;
+  display:grid; place-items:center;
+  padding:28px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(87,210,240,.05), transparent 65%);
+  overflow:hidden;
+}
+.controls{
+  display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+  padding:14px; border-top:1px solid var(--line); background:var(--surface-2);
+  font-size:13px;
+}
+.controls label{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12.5px; }
+
+/* アンカー要素 */
+.anchor{
+  background:var(--anchor-dim); border:1px solid var(--anchor); color:var(--anchor);
+  font-family:var(--mono); font-size:12px; letter-spacing:.06em;
+  padding:12px 18px; border-radius:var(--r); white-space:nowrap;
+  display:inline-flex; align-items:center; gap:8px;
+}
+.anchor::before{ content:"⚓"; font-size:14px; }
+
+/* 位置指定要素 */
+.box{
+  background:var(--pos-dim); border:1px solid var(--pos); color:var(--pos);
+  padding:10px 14px; border-radius:var(--r);
+  font-family:var(--mono); font-size:11.5px; line-height:1.6;
+  max-width:230px; box-shadow:0 8px 24px rgba(0,0,0,.45);
+}
+
+/* ボタン類 */
+button{ font:inherit; }
+.btn{
+  background:var(--surface); border:1px solid var(--line); color:var(--text);
+  padding:7px 14px; border-radius:var(--r); cursor:pointer;
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.06em; transition:.15s;
+}
+.btn:hover{ border-color:var(--pos); color:var(--pos); }
+.btn[aria-pressed="true"], .btn.on{ background:var(--pos-dim); border-color:var(--pos); color:var(--pos); }
+:focus-visible{ outline:2px solid var(--pos); outline-offset:2px; }
+
+input[type="range"]{ accent-color:var(--anchor); width:150px; }
+select{
+  background:var(--surface); color:var(--text); border:1px solid var(--line);
+  padding:6px 10px; border-radius:var(--r); font-family:var(--mono); font-size:12px;
+}
+
+/* ---------- コードブロック ---------- */
+.code{ position:relative; border-top:1px solid var(--line); }
+.code pre{
+  margin:0; padding:18px 18px 18px; overflow-x:auto;
+  font-family:var(--mono); font-size:12.5px; line-height:1.8; color:#B9CEDF;
+  background:#0C1826;
+}
+.code .cm{ color:var(--dim); }
+.code .pr{ color:var(--pos); }
+.code .vl{ color:var(--anchor); }
+.code .sel{ color:#E6EDF3; }
+.copy{
+  position:absolute; top:10px; right:10px; z-index:2;
+  background:var(--surface-2); border:1px solid var(--line); color:var(--muted);
+  padding:4px 10px; border-radius:3px; cursor:pointer;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+}
+.copy:hover{ color:var(--pos); border-color:var(--pos); }
+
+/* ============================================================
+   PLATE 02 — position-area の 3×3 グリッド（このページの主役）
+   ============================================================ */
+.pa-stage{ min-height:400px; }
+.pa-grid{
+  position:absolute; inset:28px;
+  display:grid;
+  grid-template-columns:1fr auto 1fr;   /* 中央トラック = アンカーの実寸 */
+  grid-template-rows:1fr auto 1fr;
+  place-items:stretch;
+}
+.pa-cell{
+  border:1px dashed var(--line);
+  background:transparent; cursor:pointer; padding:0;
+  transition:background .15s, border-color .15s;
+  min-width:0; min-height:0;
+}
+.pa-cell:hover{ background:rgba(87,210,240,.07); border-color:var(--pos); }
+.pa-cell[aria-pressed="true"]{ background:rgba(87,210,240,.13); border-color:var(--pos); border-style:solid; }
+.pa-cell span{
+  font-family:var(--mono); font-size:10px; letter-spacing:.06em;
+  color:var(--dim); pointer-events:none;
+}
+.pa-cell:hover span, .pa-cell[aria-pressed="true"] span{ color:var(--pos); }
+.pa-center{
+  display:grid; place-items:center; border:1px solid var(--anchor);
+  background:rgba(255,176,46,.06);
+}
+.pa-box{
+  position:absolute;
+  position-anchor:--pa;
+  position-area:top;                     /* JSで書き換え */
+}
+.pa-anchor{ anchor-name:--pa; }
+.readout{
+  font-family:var(--mono); font-size:12px; color:var(--pos);
+  background:var(--surface); border:1px solid var(--line);
+  padding:6px 12px; border-radius:var(--r);
+}
+.readout b{ color:var(--dim); font-weight:400; }
+
+/* ---------- PLATE 01 基本 ---------- */
+.p1-anchor{ anchor-name:--p1; position:relative; left:var(--dx,0px); top:var(--dy,0px); transition:left .25s, top .25s; }
+.p1-box{
+  position:absolute;
+  position-anchor:--p1;
+  top:anchor(bottom);
+  left:anchor(left);
+  margin-top:10px;
+}
+.p1-box.logical{
+  top:auto; left:auto;
+  inset-block-start:anchor(end);
+  inset-inline-start:anchor(self-end);
+  margin:0 0 0 10px;
+  margin-block-start:0;
+}
+
+/* ---------- PLATE 03 anchor-center ---------- */
+.p3-anchor{ anchor-name:--p3; }
+.p3-box{
+  position:absolute; position-anchor:--p3;
+  top:calc(anchor(bottom) + 10px);
+  left:anchor(left);
+}
+.p3-box.centered{ left:auto; justify-self:anchor-center; }
+
+/* ---------- PLATE 04 anchor-size() ---------- */
+.p4-anchor{ anchor-name:--p4; width:var(--aw,120px); justify-content:center; transition:width .3s; }
+.p4-box{
+  position:absolute; position-anchor:--p4;
+  position-area:right; margin-left:12px;
+  width:calc(anchor-size(width) * 1.6);
+  min-height:anchor-size(height);
+  max-width:none;
+}
+
+/* ---------- PLATE 05 / 06 スクロール台 ---------- */
+.scroller{
+  position:relative; height:340px; overflow:auto; overscroll-behavior:contain;
+  scrollbar-color:var(--line) transparent;
+}
+.scroller-inner{ height:900px; display:grid; place-items:center; }
+.scroller::before{
+  content:"↕ スクロールしてアンカーを端に寄せる";
+  position:sticky; top:0; left:0; display:block; z-index:3;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; color:var(--dim);
+  background:linear-gradient(var(--surface), transparent);
+  padding:8px 14px 16px; pointer-events:none;
+}
+
+.p5-anchor{ anchor-name:--p5; }
+.p5-box{
+  position:absolute; position-anchor:--p5;
+  position-area:bottom span-all;
+  margin-top:12px;
+  width:240px;
+  position-try-fallbacks: flip-block;
+}
+.p5-box.multi{
+  position-try-fallbacks: --shift-right, flip-block, flip-inline;
+}
+@position-try --shift-right{
+  position-area: right span-bottom;
+  margin: 0 0 0 12px;
+  width: 200px;
+}
+
+.p6-anchor{ anchor-name:--p6; }
+.p6-box{
+  position:absolute; position-anchor:--p6;
+  position-area:right span-all; margin-left:12px;
+  position-visibility:anchors-visible;
+}
+
+/* ---------- PLATE 07 anchor-scope ---------- */
+.scope-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; width:100%; }
+.scope-card{
+  position:relative; border:1px solid var(--line-soft); background:var(--bg);
+  min-height:170px; display:grid; place-items:center; padding:16px;
+}
+.scope-row.scoped .scope-card{ anchor-scope:--card; }
+.scope-card .anchor{ anchor-name:--card; font-size:11px; padding:9px 12px; }
+.scope-card .box{
+  position:absolute; position-anchor:--card;
+  position-area:bottom; margin-top:8px; font-size:10.5px; padding:6px 9px;
+}
+
+/* ---------- PLATE 08 popover ---------- */
+.menu-btn{ anchor-name:--menu; }
+#menu[popover]{
+  position:fixed;              /* popover はトップレイヤー */
+  inset:auto; margin:0;        /* UA既定の inset:0 / margin:auto を解除 */
+  position-anchor:--menu;
+  position-area:bottom span-right;
+  margin-top:8px;
+  position-try-fallbacks: flip-block, flip-inline;
+  background:var(--surface-2); border:1px solid var(--pos);
+  border-radius:var(--r); padding:6px; min-width:190px;
+  box-shadow:0 16px 44px rgba(0,0,0,.6);
+}
+#menu ul{ list-style:none; margin:0; padding:0; }
+#menu li a{
+  display:block; padding:8px 12px; color:var(--text); text-decoration:none;
+  border-radius:3px; font-size:13px;
+}
+#menu li a:hover{ background:var(--pos-dim); color:var(--pos); }
+
+.tip-host{ display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.tip-wrap{ position:relative; }
+.tip-trigger{ anchor-name:var(--n); }
+.tip{
+  position:absolute; position-anchor:var(--n);
+  position-area:top; margin-bottom:8px;
+  justify-self:anchor-center;
+  opacity:0; visibility:hidden; transition:opacity .16s, visibility .16s;
+  font-size:11px; padding:6px 10px; white-space:nowrap; max-width:none;
+}
+.tip-wrap:hover .tip, .tip-wrap:focus-within .tip{ opacity:1; visibility:visible; }
+
+/* ---------- 表 ---------- */
+table{ width:100%; border-collapse:collapse; margin:18px 0; font-size:13.5px; }
+th,td{ border:1px solid var(--line); padding:10px 13px; text-align:left; vertical-align:top; }
+th{ background:var(--surface-2); font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:400; }
+td{ color:var(--muted); }
+td b{ color:var(--text); font-weight:500; }
+
+/* ---------- 非対応時の案内 ---------- */
+.fallback-note{
+  border:1px solid #6B3229; background:rgba(255,138,118,.06);
+  padding:14px 16px; margin:26px 0 0; color:var(--warn); font-size:13.5px;
+}
+.fallback-note[hidden]{ display:none; }
+
+footer{
+  margin-top:110px; padding-top:28px; border-top:1px solid var(--line);
+  color:var(--dim); font-size:12.5px; font-family:var(--mono); letter-spacing:.04em;
+}
+footer a{ color:var(--muted); }
+
+@media (max-width:720px){
+  .scope-row{ grid-template-columns:1fr; }
+  .stage{ padding:20px; }
+  .pa-grid{ inset:20px; }
+  .box{ max-width:180px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">CSS Anchor Positioning · Level 1 / 2</p>
+  <h1><span class="amber">アンカー</span>に、<br><span class="cyan">要素</span>をつなぐ。</h1>
+  <p class="lead">
+    ツールチップ、ドロップダウン、エラーメッセージ。「この要素の隣に出したい」を、
+    JavaScript の位置計算なしで宣言的に書ける仕組みです。
+    アンカー側に <code>anchor-name</code>、追従側に <code>position-anchor</code>。基本はこれだけ。
+    以下すべて、実際に動くデモです。
+  </p>
+  <div class="support" id="support"></div>
+</header>
+
+<nav class="toc" aria-label="目次">
+  <a href="#p1"><b>01</b>基本の3ステップ</a>
+  <a href="#p2"><b>02</b>position-area の 3×3</a>
+  <a href="#p3"><b>03</b>anchor-center で中央揃え</a>
+  <a href="#p4"><b>04</b>anchor-size() でサイズ連動</a>
+  <a href="#p5"><b>05</b>はみ出したら自動で反転</a>
+  <a href="#p6"><b>06</b>アンカーが消えたら隠す</a>
+  <a href="#p7"><b>07</b>同名アンカーのスコープ</a>
+  <a href="#p8"><b>08</b>popover と組み合わせる</a>
+  <a href="#p9"><b>09</b>対応状況とフォールバック</a>
+</nav>
+
+<div class="fallback-note" id="fallbackNote" hidden>
+  このブラウザは Anchor Positioning に対応していないため、デモは通常の絶対配置で表示されます。
+  Chrome 125+ / Edge 125+ / Firefox 147+ / Safari 26+ でご覧ください。
+</div>
+
+<!-- ============================================================ 01 -->
+<section class="plate" id="p1">
+  <header>
+    <span class="tag">01 — anchor-name / position-anchor / anchor()</span>
+    <h2>基本の3ステップ</h2>
+  </header>
+  <p>
+    <strong>①</strong> アンカー側に <code>anchor-name: --名前</code> を付ける（値は必ず <code>--</code> で始まる dashed-ident）。
+    <strong>②</strong> 追従側を <code>position: absolute</code> か <code>fixed</code> にする。
+    <strong>③</strong> <code>position-anchor</code> で名前を指す。
+  </p>
+  <p>
+    これで「関連づけ」は完了ですが、まだ<strong>くっついてはいません</strong>。
+    実際に繋ぐのは <code>top</code> / <code>left</code> などの inset プロパティに
+    <code>anchor()</code> 関数を書いたときです。<code>anchor(bottom)</code> は
+    「アンカーの下端の位置」を長さとして返すので、<code>calc()</code> の中にも入れられます。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live</span><span id="p1-read" class="readout">top: anchor(bottom) / left: anchor(left)</span></div>
+    <div class="stage">
+      <div class="anchor p1-anchor" id="p1-anchor">anchor</div>
+      <div class="box p1-box" id="p1-box">アンカーの真下・左端揃え</div>
+    </div>
+    <div class="controls">
+      <label>横 <input type="range" id="p1-x" min="-140" max="140" value="0"></label>
+      <label>縦 <input type="range" id="p1-y" min="-70" max="70" value="0"></label>
+      <button class="btn" id="p1-toggle" aria-pressed="false">論理プロパティ版に切替</button>
+      <button class="btn" id="p1-reset">リセット</button>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="cm">/* ① アンカーになる要素 */</span>
+<span class="sel">.anchor</span> {
+  <span class="pr">anchor-name</span>: <span class="vl">--p1</span>;
+}
+
+<span class="cm">/* ②③ 追従する要素 */</span>
+<span class="sel">.box</span> {
+  <span class="pr">position</span>: <span class="vl">absolute</span>;        <span class="cm">/* absolute か fixed 必須 */</span>
+  <span class="pr">position-anchor</span>: <span class="vl">--p1</span>;
+  <span class="pr">top</span>:  <span class="vl">anchor(bottom)</span>;  <span class="cm">/* 上端 ← アンカーの下端 */</span>
+  <span class="pr">left</span>: <span class="vl">anchor(left)</span>;    <span class="cm">/* 左端 ← アンカーの左端 */</span>
+  <span class="pr">margin-top</span>: <span class="vl">10px</span>;        <span class="cm">/* 隙間は margin か calc() で */</span>
+}
+
+<span class="cm">/* 論理プロパティ版（縦書き・RTL でも破綻しない） */</span>
+<span class="sel">.box</span> {
+  <span class="pr">inset-block-start</span>:  <span class="vl">anchor(end)</span>;
+  <span class="pr">inset-inline-start</span>: <span class="vl">anchor(self-end)</span>;
+}</pre>
+    </div>
+  </div>
+
+  <ul class="notes">
+    <li><code>anchor()</code> の第2引数はフォールバック値です。<code>anchor(right, 20px)</code> と書くと、
+        アンカーが存在しない／inset プロパティと軸が噛み合わない場合に <code>20px</code> が使われます。</li>
+    <li>軸が合わない指定（例：<code>bottom: anchor(right)</code>）は無効になり、フォールバック値に落ちます。
+        <code>top/bottom</code> には縦方向、<code>left/right</code> には横方向の <code>&lt;anchor-side&gt;</code> を。</li>
+    <li>アンカーが <code>display: none</code> だと関連づけ自体が切れ、
+        追従要素は「直近の位置指定された祖先」を基準に配置されます。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 02 -->
+<section class="plate" id="p2">
+  <header>
+    <span class="tag">02 — position-area</span>
+    <h2><code>position-area</code> は 3×3 のマス目</h2>
+  </header>
+  <p>
+    <code>anchor()</code> を4辺ぶん書くのは正直しんどい。そこで <code>position-area</code> です。
+    <strong>アンカーの箱を中央マスとする 3×3 グリッド</strong>を想像して、どのマスに置くかを名前で指定します。
+  </p>
+  <p>
+    下のデモの点線が、その 3×3 グリッドそのものです（中央の枠がアンカー＝中央マス）。
+    <strong>マスをクリックすると位置指定要素がそこへ移動します</strong>。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live · クリックで移動</span><span class="readout"><b>position-area:</b> <span id="pa-read">top</span></span></div>
+    <div class="stage pa-stage">
+      <div class="pa-grid" id="pa-grid">
+        <button class="pa-cell" data-v="top left"><span>top left</span></button>
+        <button class="pa-cell" data-v="top center"><span>top center</span></button>
+        <button class="pa-cell" data-v="top right"><span>top right</span></button>
+        <button class="pa-cell" data-v="center left"><span>center left</span></button>
+        <div class="pa-center"><div class="anchor pa-anchor">anchor</div></div>
+        <button class="pa-cell" data-v="center right"><span>center right</span></button>
+        <button class="pa-cell" data-v="bottom left"><span>bottom left</span></button>
+        <button class="pa-cell" data-v="bottom center"><span>bottom center</span></button>
+        <button class="pa-cell" data-v="bottom right"><span>bottom right</span></button>
+      </div>
+      <div class="box pa-box" id="pa-box">position-area</div>
+    </div>
+    <div class="controls">
+      <span style="color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:.1em;">SPAN / 省略記法：</span>
+      <button class="btn" data-v="top">top</button>
+      <button class="btn" data-v="bottom span-right">bottom span-right</button>
+      <button class="btn" data-v="top span-left">top span-left</button>
+      <button class="btn" data-v="left span-all">left span-all</button>
+      <button class="btn" data-v="block-end span-all">block-end span-all</button>
+      <button class="btn" data-v="start start">start start</button>
+      <button class="btn" data-v="center">center</button>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="sel">.anchor</span> { <span class="pr">anchor-name</span>: <span class="vl">--pa</span>; }
+
+<span class="sel">.box</span> {
+  <span class="pr">position</span>: <span class="vl">absolute</span>;
+  <span class="pr">position-anchor</span>: <span class="vl">--pa</span>;
+  <span class="pr">position-area</span>: <span class="vl">bottom center</span>;
+}</pre>
+    </div>
+  </div>
+
+  <h3>値の読み方</h3>
+  <ul class="notes">
+    <li><strong>2値指定</strong>：行 × 列。<code>top left</code>、<code>bottom center</code> のようにマスを1つ選ぶ。</li>
+    <li><strong>span-*</strong>：<code>top span-left</code> は「上の行に置き、中央マスと左マスにまたがる」。
+        <code>span-all</code> は3マス全部。</li>
+    <li><strong>1値だけ</strong>のときの挙動が独特です。
+        <code>top</code>（物理値）は <code>top span-all</code> 相当、
+        <code>start</code>（論理値）は <code>start start</code> 相当、
+        <code>center</code> は <code>center center</code> 相当。</li>
+    <li>物理値（<code>top/left</code>）と論理値（<code>start/end</code>）を<strong>混ぜると宣言ごと無効</strong>になります。
+        <code>top span-inline-end</code> はダメ。座標系（<code>x-start/y-end</code>）も同様に系統を揃えて。</li>
+  </ul>
+
+  <h3>サイズが勝手に決まる件</h3>
+  <p>
+    幅を明示しないと、<code>position-area</code> 配置の要素は <code>width: max-content</code> 的に振る舞い、
+    置かれたマスの範囲で折り返します。<code>bottom center</code> のように中央列に置くと、
+    <strong>幅がアンカーと同じ</strong>になります（最小幅は <code>min-content</code> なので、いちばん長い単語ぶんは確保される）。
+    意図した幅にしたいなら明示するか、次の <code>anchor-size()</code> を使ってください。
+  </p>
+</section>
+
+<!-- ============================================================ 03 -->
+<section class="plate" id="p3">
+  <header>
+    <span class="tag">03 — anchor-center</span>
+    <h2>アンカーの中心に揃える</h2>
+  </header>
+  <p>
+    <code>anchor()</code> で細かく詰めつつ「でも横方向はアンカーの中央に揃えたい」。
+    これは inset だけだと <code>calc(anchor(center) - 50%)</code> のような芸当が必要ですが、
+    <code>justify-self</code> / <code>align-self</code> に <strong><code>anchor-center</code></strong> という値が用意されています。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live</span><span class="readout" id="p3-read">left: anchor(left)</span></div>
+    <div class="stage">
+      <div class="anchor p3-anchor">かなり長いアンカー要素</div>
+      <div class="box p3-box" id="p3-box">中央に揃えたい吹き出し</div>
+    </div>
+    <div class="controls">
+      <button class="btn" id="p3-toggle" aria-pressed="false">justify-self: anchor-center を適用</button>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="sel">.box</span> {
+  <span class="pr">position</span>: <span class="vl">absolute</span>;
+  <span class="pr">position-anchor</span>: <span class="vl">--p3</span>;
+  <span class="pr">top</span>: <span class="vl">calc(anchor(bottom) + 10px)</span>;
+  <span class="pr">justify-self</span>: <span class="vl">anchor-center</span>;   <span class="cm">/* 横方向をアンカー中心に */</span>
+  <span class="cm">/* 縦を揃えたいときは align-self: anchor-center */</span>
+}</pre>
+    </div>
+  </div>
+  <p>
+    ツールチップの矢印を中央に出したいときの定番です。
+    <code>position-area: bottom center</code> でも中央には来ますが、あちらは幅がアンカーに引きずられます。
+    <strong>幅を自分で決めつつ中心を合わせたいなら <code>anchor-center</code></strong> が正解。
+  </p>
+</section>
+
+<!-- ============================================================ 04 -->
+<section class="plate" id="p4">
+  <header>
+    <span class="tag">04 — anchor-size()</span>
+    <h2>アンカーの<em>寸法</em>に連動させる</h2>
+  </header>
+  <p>
+    <code>anchor()</code> が「位置」を返すのに対し、<code>anchor-size()</code> は「寸法」を返します。
+    <code>width</code> / <code>height</code> / <code>min-*</code> / <code>max-*</code> などのサイズ系プロパティに書けて、
+    <strong>inset や margin にも書けます</strong>。
+  </p>
+  <p>下のスライダーでアンカーの幅を変えてみてください。追従側が比例して伸びます。</p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live</span><span class="readout"><b>anchor width:</b> <span id="p4-read">120</span>px</span></div>
+    <div class="stage">
+      <div class="anchor p4-anchor" id="p4-anchor">anchor</div>
+      <div class="box p4-box">幅 = アンカー幅 × 1.6<br>高さ最小 = アンカー高さ</div>
+    </div>
+    <div class="controls">
+      <label>アンカーの幅 <input type="range" id="p4-w" min="90" max="280" value="120"></label>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="sel">.box</span> {
+  <span class="pr">position</span>: <span class="vl">absolute</span>;
+  <span class="pr">position-anchor</span>: <span class="vl">--p4</span>;
+  <span class="pr">position-area</span>: <span class="vl">right</span>;
+  <span class="pr">margin-left</span>: <span class="vl">12px</span>;
+
+  <span class="pr">width</span>: <span class="vl">calc(anchor-size(width) * 1.6)</span>;
+  <span class="pr">min-height</span>: <span class="vl">anchor-size(height)</span>;
+}
+
+<span class="cm">/* 論理値・別アンカー指定・フォールバックも可 */</span>
+<span class="sel">.other</span> {
+  <span class="pr">inline-size</span>:  <span class="vl">calc(anchor-size(self-inline) * 4)</span>;
+  <span class="pr">margin-left</span>:  <span class="vl">calc(anchor-size(width) / 4)</span>;
+  <span class="pr">inset-inline-end</span>: <span class="vl">anchor-size(--other-anchor height, 100px)</span>;
+}</pre>
+    </div>
+  </div>
+  <p>
+    注意点がひとつ。<code>left: anchor-size(width)</code> のように inset に書いた場合、
+    それは<strong>アンカーの位置ではなく「包含ブロックの端からアンカーの幅ぶん」</strong>の意味になります。
+    追従はしません。位置を追わせたいのは <code>anchor()</code>、寸法だけ借りるのが <code>anchor-size()</code> と覚えてください。
+  </p>
+</section>
+
+<!-- ============================================================ 05 -->
+<section class="plate" id="p5">
+  <header>
+    <span class="tag">05 — position-try-fallbacks / @position-try</span>
+    <h2>はみ出しそうなら、勝手に反転する</h2>
+  </header>
+  <p>
+    Floating UI を捨てられる最大の理由がこれです。
+    既定位置で画面（正確には包含ブロックやスクロールポート）からはみ出すとき、
+    ブラウザが<strong>代替位置を順に試して、収まる最初のものを採用</strong>します。
+  </p>
+  <p>
+    手っ取り早いのが <strong>try-tactic</strong> キーワード。
+    <code>flip-block</code>（上下反転）、<code>flip-inline</code>（左右反転）、<code>flip-start</code>（対角に入れ替え）を並べるだけ。
+    下のデモを<strong>上下にスクロール</strong>すると、下端でツールチップが上に飛びます。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live · スクロールしてね</span><span class="readout" id="p5-read">flip-block</span></div>
+    <div class="scroller">
+      <div class="scroller-inner">
+        <div class="anchor p5-anchor">anchor</div>
+        <div class="box p5-box" id="p5-box">下に出るけど、はみ出しそうなら上に回る</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn on" id="p5-simple" aria-pressed="true">flip-block だけ</button>
+      <button class="btn" id="p5-multi" aria-pressed="false">@position-try + 複数候補</button>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="cm">/* パターンA：キーワードだけで済ませる */</span>
+<span class="sel">.tooltip</span> {
+  <span class="pr">position</span>: <span class="vl">absolute</span>;
+  <span class="pr">position-anchor</span>: <span class="vl">--p5</span>;
+  <span class="pr">position-area</span>: <span class="vl">bottom span-all</span>;
+  <span class="pr">margin-top</span>: <span class="vl">12px</span>;
+  <span class="pr">position-try-fallbacks</span>: <span class="vl">flip-block, flip-inline, flip-block flip-inline</span>;
+}
+
+<span class="cm">/* パターンB：候補位置を自分で定義する */</span>
+<span class="pr">@position-try</span> <span class="vl">--shift-right</span> {
+  <span class="pr">position-area</span>: <span class="vl">right span-bottom</span>;
+  <span class="pr">margin</span>: <span class="vl">0 0 0 12px</span>;
+  <span class="pr">width</span>: <span class="vl">200px</span>;
+}
+<span class="sel">.tooltip</span> {
+  <span class="pr">position-try-fallbacks</span>: <span class="vl">--shift-right, flip-block, flip-inline</span>;
+  <span class="cm">/* 収まる候補が複数あるとき、面積が最大のものを選ぶ： */</span>
+  <span class="pr">position-try-order</span>: <span class="vl">most-height</span>;
+}</pre>
+    </div>
+  </div>
+
+  <ul class="notes">
+    <li><code>@position-try</code> の中に書けるのは inset 系・margin 系・サイズ系・<code>position-area</code>・
+        <code>align-self</code>/<code>justify-self</code> など、位置とサイズに関わるものだけです。色などは書けません。</li>
+    <li><code>position-try</code> は <code>position-try-order</code> と <code>position-try-fallbacks</code> の一括指定です。</li>
+    <li>どの候補が採用されているかは <strong>anchored container queries</strong>
+        （<code>@container ... </code>）で拾って、矢印の向きを変えるといった応用ができます。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 06 -->
+<section class="plate" id="p6">
+  <header>
+    <span class="tag">06 — position-visibility</span>
+    <h2>アンカーが見えなくなったら、隠す</h2>
+  </header>
+  <p>
+    スクロールでアンカーが画面外に出たのに、ツールチップだけ宙に浮いて残る——あの気持ち悪さの解決策です。
+    <code>position-visibility: anchors-visible</code> で、<strong>アンカーが見えている間だけ表示</strong>されます。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live · アンカーを画面外へスクロール</span><span class="readout">anchors-visible</span></div>
+    <div class="scroller">
+      <div class="scroller-inner">
+        <div class="anchor p6-anchor">anchor</div>
+        <div class="box p6-box">アンカーが消えると<br>私も消えます</div>
+      </div>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="sel">.box</span> {
+  <span class="pr">position-visibility</span>: <span class="vl">anchors-visible</span>;
+}
+
+<span class="cm">/* 取りうる値 */</span>
+<span class="cm">  always         … 常に表示（初期値）</span>
+<span class="cm">  anchors-visible … アンカーが見えている間だけ表示</span>
+<span class="cm">  no-overflow    … 自分がはみ出したら隠す</span></pre>
+    </div>
+  </div>
+  <p>
+    隠れかたは <code>visibility: hidden</code> 相当（<strong>強く隠される</strong>ので子孫で打ち消せません）。
+    レイアウト上の場所は保持されます。
+  </p>
+</section>
+
+<!-- ============================================================ 07 -->
+<section class="plate" id="p7">
+  <header>
+    <span class="tag">07 — anchor-scope</span>
+    <h2>同じ名前のアンカーが複数あるとき</h2>
+  </header>
+  <p>
+    カードコンポーネントを3枚並べて、それぞれに同じ CSS を当てる。
+    素直に書くと <code>anchor-name: --card</code> が3つになりますが、
+    <strong>マッチするのはソース順で最後のひとつだけ</strong>。3枚ぶんのツールチップが右端のカードに集合します。
+  </p>
+  <p>
+    <code>anchor-scope</code> を親（この例では各カード）に置くと、
+    その名前の可視範囲がサブツリー内に閉じます。下のボタンで切り替えてみてください。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live</span><span class="readout" id="p7-read">anchor-scope: なし</span></div>
+    <div class="stage" style="min-height:auto;padding:20px;">
+      <div class="scope-row" id="scope-row">
+        <div class="scope-card"><div class="anchor">card 1</div><div class="box">tooltip 1</div></div>
+        <div class="scope-card"><div class="anchor">card 2</div><div class="box">tooltip 2</div></div>
+        <div class="scope-card"><div class="anchor">card 3</div><div class="box">tooltip 3</div></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn" id="p7-toggle" aria-pressed="false">anchor-scope: --card を適用</button>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="sel">.card</span>   { <span class="pr">anchor-scope</span>: <span class="vl">--card</span>; }   <span class="cm">/* このサブツリーに閉じ込める */</span>
+<span class="sel">.anchor</span> { <span class="pr">anchor-name</span>:  <span class="vl">--card</span>; }
+<span class="sel">.box</span>    { <span class="pr">position</span>: <span class="vl">absolute</span>; <span class="pr">position-anchor</span>: <span class="vl">--card</span>; <span class="pr">position-area</span>: <span class="vl">bottom</span>; }
+
+<span class="cm">/* 値は3種類 */</span>
+<span class="cm">  none            … 初期値（スコープなし）</span>
+<span class="cm">  all             … サブツリー内の全 anchor-name を閉じる</span>
+<span class="cm">  --a, --b        … 指定した名前だけ閉じる</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 08 -->
+<section class="plate" id="p8">
+  <header>
+    <span class="tag">08 — Popover API × Anchor Positioning</span>
+    <h2>実戦：ドロップダウンとツールチップ</h2>
+  </header>
+  <p>
+    <code>popover</code> 属性が「開閉・Esc・外側クリックで閉じる・トップレイヤー描画」を担当し、
+    Anchor Positioning が「どこに出すか」を担当する。この2つで、
+    <strong>ドロップダウンが JavaScript ゼロで完成します</strong>。
+  </p>
+  <p>
+    <code>popovertarget</code> で紐づけた時点で<strong>暗黙のアンカー参照</strong>が張られますが、
+    エンジン差があるので実務では <code>anchor-name</code> / <code>position-anchor</code> を明示するのが安全です。
+  </p>
+
+  <div class="demo">
+    <div class="demo-head"><span>Live</span><span class="readout">popover + position-area</span></div>
+    <div class="stage" style="min-height:260px;">
+      <div style="display:grid;gap:26px;justify-items:center;">
+        <button class="btn menu-btn" popovertarget="menu">メニューを開く ▾</button>
+        <div popover id="menu">
+          <ul>
+            <li><a href="#p8">プロフィール</a></li>
+            <li><a href="#p8">チーム設定</a></li>
+            <li><a href="#p8">請求</a></li>
+            <li><a href="#p8">ログアウト</a></li>
+          </ul>
+        </div>
+
+        <div class="tip-host">
+          <span class="tip-wrap" style="--n:--t1"><button class="btn tip-trigger">保存</button><span class="box tip">⌘S でも保存できます</span></span>
+          <span class="tip-wrap" style="--n:--t2"><button class="btn tip-trigger">公開</button><span class="box tip">全メンバーに見えるようになります</span></span>
+          <span class="tip-wrap" style="--n:--t3"><button class="btn tip-trigger">削除</button><span class="box tip">30日間は復元できます</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="code">
+      <button class="copy">COPY</button>
+<pre><span class="cm">&lt;!-- HTML：JS なし --&gt;</span>
+&lt;button popovertarget="menu"&gt;メニュー ▾&lt;/button&gt;
+&lt;div popover id="menu"&gt; … &lt;/div&gt;
+
+<span class="sel">.menu-btn</span> { <span class="pr">anchor-name</span>: <span class="vl">--menu</span>; }
+
+<span class="sel">#menu</span>[<span class="sel">popover</span>] {
+  <span class="pr">position</span>: <span class="vl">fixed</span>;
+  <span class="pr">inset</span>: <span class="vl">auto</span>;                  <span class="cm">/* UA 既定の inset:0 を解除 */</span>
+  <span class="pr">margin</span>: <span class="vl">0</span>;                     <span class="cm">/* UA 既定の margin:auto を解除 */</span>
+
+  <span class="pr">position-anchor</span>: <span class="vl">--menu</span>;
+  <span class="pr">position-area</span>: <span class="vl">bottom span-right</span>;
+  <span class="pr">margin-top</span>: <span class="vl">8px</span>;
+  <span class="pr">position-try-fallbacks</span>: <span class="vl">flip-block, flip-inline</span>;
+}</pre>
+    </div>
+  </div>
+  <p>
+    ハマりどころは <strong>UA スタイルシートの打ち消し</strong>です。
+    <code>[popover]</code> には既定で <code>inset: 0; margin: auto;</code> が当たっていて、
+    これを消さないと画面中央に居座ります。<code>inset: auto; margin: 0;</code> を先に書いてから位置を指定してください。
+  </p>
+</section>
+
+<!-- ============================================================ 09 -->
+<section class="plate" id="p9">
+  <header>
+    <span class="tag">09 — Browser support</span>
+    <h2>対応状況とフォールバック</h2>
+  </header>
+
+  <table>
+    <thead><tr><th>ブラウザ</th><th>対応バージョン</th><th>備考</th></tr></thead>
+    <tbody>
+      <tr><td><b>Chrome / Edge</b></td><td>125+（2024年5月）</td><td>最初に実装。機能はほぼ揃っている</td></tr>
+      <tr><td><b>Safari</b></td><td>26（2025年9月）</td><td>WebKit Features in Safari 26.0 で搭載</td></tr>
+      <tr><td><b>Firefox</b></td><td>147+（2026年1月）</td><td>デフォルト有効化。これで全エンジン揃った</td></tr>
+      <tr><td><b>Opera / Samsung Internet</b></td><td>111+ / 27+</td><td>Chromium 追従</td></tr>
+    </tbody>
+  </table>
+  <p>
+    ひとつ実務上の留意点。<strong>Shadow DOM をまたぐアンカー参照</strong>（別のシャドウツリーのアンカーを指す）と、
+    その周辺での <code>anchor-scope</code> の挙動には、まだエンジン差が残っています。
+    Web Components ベースの設計で使うなら、ここは実機確認を挟んでください。
+  </p>
+
+  <h3>段階的に導入する書き方</h3>
+  <div class="demo">
+    <div class="code" style="border-top:none;">
+      <button class="copy">COPY</button>
+<pre><span class="cm">/* 1. まず従来の絶対配置で「そこそこ正しい」位置に置く */</span>
+<span class="sel">.tooltip</span> {
+  <span class="pr">position</span>: <span class="vl">absolute</span>;
+  <span class="pr">top</span>: <span class="vl">100%</span>;
+  <span class="pr">left</span>: <span class="vl">0</span>;
+}
+
+<span class="cm">/* 2. 対応ブラウザだけ上書きする */</span>
+<span class="pr">@supports</span> (<span class="pr">anchor-name</span>: <span class="vl">--x</span>) {
+  <span class="sel">.trigger</span> { <span class="pr">anchor-name</span>: <span class="vl">--tip</span>; }
+  <span class="sel">.tooltip</span> {
+    <span class="pr">top</span>: <span class="vl">auto</span>; <span class="pr">left</span>: <span class="vl">auto</span>;
+    <span class="pr">position-anchor</span>: <span class="vl">--tip</span>;
+    <span class="pr">position-area</span>: <span class="vl">bottom</span>;
+    <span class="pr">justify-self</span>: <span class="vl">anchor-center</span>;
+    <span class="pr">position-try-fallbacks</span>: <span class="vl">flip-block</span>;
+  }
+}</pre>
+    </div>
+  </div>
+  <p>
+    JS からの判定は <code>CSS.supports('anchor-name: --x')</code>。
+    どうしても旧環境を揃えたい場合は oddBird の polyfill がありますが、
+    ネイティブが使えるときはネイティブに任せる分岐を必ず入れてください。
+  </p>
+
+  <h3>チートシート</h3>
+  <table>
+    <thead><tr><th>プロパティ / 関数</th><th>置き場所</th><th>役割</th></tr></thead>
+    <tbody>
+      <tr><td><code>anchor-name</code></td><td>アンカー側</td><td>名前を付ける（<code>--foo</code>）</td></tr>
+      <tr><td><code>anchor-scope</code></td><td>共通の親</td><td>名前の可視範囲をサブツリーに閉じる</td></tr>
+      <tr><td><code>position-anchor</code></td><td>追従側</td><td>既定アンカーを指定して関連づける</td></tr>
+      <tr><td><code>anchor()</code></td><td>inset プロパティ</td><td>アンカーの<b>辺の位置</b>を長さで返す</td></tr>
+      <tr><td><code>anchor-size()</code></td><td>サイズ / inset / margin</td><td>アンカーの<b>寸法</b>を長さで返す</td></tr>
+      <tr><td><code>position-area</code></td><td>追従側</td><td>3×3 グリッドでざっくり配置</td></tr>
+      <tr><td><code>anchor-center</code></td><td><code>justify-self</code> / <code>align-self</code></td><td>アンカーの中心に揃える</td></tr>
+      <tr><td><code>@position-try</code></td><td>トップレベル</td><td>代替位置を名前付きで定義</td></tr>
+      <tr><td><code>position-try-fallbacks</code></td><td>追従側</td><td>試す順に候補を並べる</td></tr>
+      <tr><td><code>position-try-order</code></td><td>追従側</td><td>候補の優先基準（<code>most-height</code> 等）</td></tr>
+      <tr><td><code>position-visibility</code></td><td>追従側</td><td>アンカーが見えない時に隠す</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  出典：MDN Web Docs — CSS anchor positioning / Using CSS anchor positioning<br>
+  <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Anchor_positioning">developer.mozilla.org/en-US/docs/Web/CSS/Guides/Anchor_positioning</a>
+</footer>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- 対応状況チップ ---------- */
+  const feats = [
+    ['anchor-name',            'anchor-name: --x'],
+    ['position-anchor',        'position-anchor: --x'],
+    ['position-area',          'position-area: top'],
+    ['anchor()',               'top: anchor(bottom)'],
+    ['anchor-size()',          'width: anchor-size(width)'],
+    ['anchor-center',          'justify-self: anchor-center'],
+    ['position-try-fallbacks', 'position-try-fallbacks: flip-block'],
+    ['position-visibility',    'position-visibility: anchors-visible'],
+    ['anchor-scope',           'anchor-scope: --x'],
+  ];
+  const bar = document.getElementById('support');
+  let core = true;
+  feats.forEach(([label, decl]) => {
+    const ok = CSS.supports(decl);
+    if (label === 'anchor-name' && !ok) core = false;
+    const el = document.createElement('span');
+    el.className = 'chip';
+    el.dataset.state = ok ? 'yes' : 'no';
+    el.textContent = (ok ? '✓ ' : '✕ ') + label;
+    bar.appendChild(el);
+  });
+  if (!core) document.getElementById('fallbackNote').hidden = false;
+
+  /* ---------- コピーボタン ---------- */
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pre = btn.parentElement.querySelector('pre');
+      try {
+        await navigator.clipboard.writeText(pre.innerText);
+        const t = btn.textContent;
+        btn.textContent = 'COPIED';
+        setTimeout(() => { btn.textContent = t; }, 1400);
+      } catch {
+        btn.textContent = 'コピーできません';
+      }
+    });
+  });
+
+  const $ = id => document.getElementById(id);
+
+  /* ---------- 01 基本 ---------- */
+  const p1a = $('p1-anchor'), p1b = $('p1-box'), p1r = $('p1-read');
+  const moveP1 = () => {
+    p1a.style.setProperty('--dx', $('p1-x').value + 'px');
+    p1a.style.setProperty('--dy', $('p1-y').value + 'px');
+  };
+  $('p1-x').addEventListener('input', moveP1);
+  $('p1-y').addEventListener('input', moveP1);
+  $('p1-reset').addEventListener('click', () => {
+    $('p1-x').value = 0; $('p1-y').value = 0; moveP1();
+  });
+  $('p1-toggle').addEventListener('click', e => {
+    const on = p1b.classList.toggle('logical');
+    e.currentTarget.setAttribute('aria-pressed', String(on));
+    e.currentTarget.textContent = on ? '物理プロパティ版に戻す' : '論理プロパティ版に切替';
+    p1r.textContent = on
+      ? 'inset-block-start: anchor(end) / inset-inline-start: anchor(self-end)'
+      : 'top: anchor(bottom) / left: anchor(left)';
+  });
+
+  /* ---------- 02 position-area ---------- */
+  const paBox = $('pa-box'), paRead = $('pa-read');
+  const paCells = [...document.querySelectorAll('.pa-cell')];
+  const paBtns  = [...document.querySelectorAll('#p2 .controls .btn')];
+  const setPA = (value, source) => {
+    paBox.style.positionArea = value;
+    paRead.textContent = value;
+    paCells.forEach(c => c.setAttribute('aria-pressed', String(c === source)));
+    paBtns.forEach(b => b.classList.toggle('on', b === source));
+  };
+  paCells.forEach(c => c.addEventListener('click', () => setPA(c.dataset.v, c)));
+  paBtns.forEach(b => b.addEventListener('click', () => setPA(b.dataset.v, b)));
+  setPA('top', paBtns[0]);
+
+  /* ---------- 03 anchor-center ---------- */
+  $('p3-toggle').addEventListener('click', e => {
+    const on = $('p3-box').classList.toggle('centered');
+    e.currentTarget.setAttribute('aria-pressed', String(on));
+    e.currentTarget.textContent = on ? 'left: anchor(left) に戻す' : 'justify-self: anchor-center を適用';
+    $('p3-read').textContent = on ? 'justify-self: anchor-center' : 'left: anchor(left)';
+  });
+
+  /* ---------- 04 anchor-size() ---------- */
+  $('p4-w').addEventListener('input', e => {
+    $('p4-anchor').style.setProperty('--aw', e.target.value + 'px');
+    $('p4-read').textContent = e.target.value;
+  });
+
+  /* ---------- 05 position-try ---------- */
+  const p5box = $('p5-box');
+  const setP5 = multi => {
+    p5box.classList.toggle('multi', multi);
+    $('p5-simple').setAttribute('aria-pressed', String(!multi));
+    $('p5-simple').classList.toggle('on', !multi);
+    $('p5-multi').setAttribute('aria-pressed', String(multi));
+    $('p5-multi').classList.toggle('on', multi);
+    $('p5-read').textContent = multi ? '--shift-right, flip-block, flip-inline' : 'flip-block';
+  };
+  $('p5-simple').addEventListener('click', () => setP5(false));
+  $('p5-multi').addEventListener('click', () => setP5(true));
+
+  /* ---------- 07 anchor-scope ---------- */
+  $('p7-toggle').addEventListener('click', e => {
+    const on = $('scope-row').classList.toggle('scoped');
+    e.currentTarget.setAttribute('aria-pressed', String(on));
+    e.currentTarget.textContent = on ? 'anchor-scope を外す' : 'anchor-scope: --card を適用';
+    $('p7-read').textContent = on ? 'anchor-scope: --card' : 'anchor-scope: なし';
+  });
+
+  /* スクロールデモを中央から始める */
+  document.querySelectorAll('.scroller').forEach(s => {
+    s.scrollTop = (s.scrollHeight - s.clientHeight) / 2;
+  });
+})();
+</script>
+</body>
+</html>
