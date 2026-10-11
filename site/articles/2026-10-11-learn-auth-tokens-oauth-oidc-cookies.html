@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>認証トークンの地図 — Cookie・OAuth 2.0・OIDC と GitBox のログイン</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1d1f23; --muted: #5f6672; --line: #dcd8cf; --card: #ffffff;
+    --accent: #2456c9; --gh: #6f42c1; --sb: #1f9d6b; --nx: #c2571a; --br: #2456c9;
+    --ok: #177245; --ng: #b3261e; --warn: #9a6700; --code: #f1eee7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181c; --fg: #e8e6e1; --muted: #a3a8b3; --line: #343842; --card: #1e2127;
+      --accent: #8fb0ff; --gh: #b99cf0; --sb: #5fd3a3; --nx: #f0a070; --br: #8fb0ff;
+      --ok: #6fd39a; --ng: #ff8a80; --warn: #e3b341; --code: #262a31; }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.85 "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 28px 20px 96px; }
+  h1 { font-size: 1.9rem; line-height: 1.4; margin: 0 0 8px; }
+  h2 { font-size: 1.5rem; margin: 64px 0 12px; padding-top: 16px; border-top: 2px solid var(--line); }
+  h3 { font-size: 1.2rem; margin: 40px 0 8px; }
+  h4 { font-size: 1.02rem; margin: 26px 0 6px; }
+  p { margin: 12px 0; }
+  a { color: var(--accent); }
+  .lede { color: var(--muted); font-size: 1.02rem; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font: 0.88em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }
+  pre { background: var(--code); padding: 14px 16px; border-radius: 8px; overflow-x: auto; white-space: pre;
+    font: 0.82rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); }
+  pre code { background: none; padding: 0; font-size: 1em; word-break: normal; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code); }
+  .scroll { overflow-x: auto; }
+  nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px; margin: 24px 0; }
+  nav.toc ol { margin: 6px 0; padding-left: 22px; } nav.toc li { margin: 2px 0; }
+  .badge { display: inline-block; font-size: 0.72rem; font-weight: 700; border-radius: 999px; padding: 1px 9px; margin: 0 2px; vertical-align: 2px; white-space: nowrap; border: 1px solid; }
+  .b-m { color: var(--ok); border-color: var(--ok); } .b-d { color: var(--accent); border-color: var(--accent); }
+  .b-c { color: var(--nx); border-color: var(--nx); } .b-u { color: var(--warn); border-color: var(--warn); }
+  .callout { border-left: 5px solid var(--accent); background: var(--card); border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 18px 0; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .callout > strong:first-child { display: block; margin-bottom: 2px; }
+  .callout.key { border-left-color: var(--sb); } .callout.myth { border-left-color: var(--gh); }
+  .callout.warn { border-left-color: var(--ng); } .callout.unv { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 7%, var(--card)); }
+  .callout.meas { border-left-color: var(--ok); }
+  /* system diagram */
+  .sys { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 18px 0; }
+  .actor { border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card); }
+  .actor h5 { margin: 0 0 6px; font-size: 0.95rem; }
+  .actor.gh { border-color: var(--gh); } .actor.sb { border-color: var(--sb); } .actor.nx { border-color: var(--nx); } .actor.br { border-color: var(--br); grid-column: 1 / -1; }
+  .jar { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+  .jar > div { border: 1px dashed var(--line); border-radius: 8px; padding: 8px; }
+  .chip { display: inline-block; border-radius: 6px; padding: 2px 8px; margin: 3px 3px 3px 0; font: 0.78rem/1.5 ui-monospace, Menlo, monospace; border: 1px solid; background: var(--bg); }
+  .chip.gh { color: var(--gh); border-color: var(--gh); } .chip.sb { color: var(--sb); border-color: var(--sb); } .chip.nx { color: var(--nx); border-color: var(--nx); }
+  .small { font-size: 0.84rem; color: var(--muted); }
+  /* sequence */
+  .seq { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 12px; margin: 16px 0; }
+  .lanes, .row { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .lanes div { text-align: center; font-weight: 700; font-size: 0.82rem; padding: 6px 2px; border-bottom: 2px solid var(--line); }
+  .lanes .l0 { color: var(--br); } .lanes .l1 { color: var(--nx); } .lanes .l2 { color: var(--sb); } .lanes .l3 { color: var(--gh); }
+  .row { position: relative; padding: 10px 0 6px; min-height: 46px; background-image: linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line)); background-size: 1px 100%; background-repeat: no-repeat; background-position: 12.5% 0, 37.5% 0, 62.5% 0, 87.5% 0; transition: opacity .25s; }
+  .row.future { opacity: .13; } .row.current .lbl { font-weight: 700; }
+  /* --n = number of lanes the arrow spans; the margin puts both ends on the lane lines */
+  .arr { position: relative; margin: 0 calc(50% / var(--n, 4)); text-align: center; }
+  .arr .lbl { font-size: 0.78rem; line-height: 1.45; display: block; padding: 0 6px 3px; }
+  .arr .ln { height: 2px; background: var(--fg); position: relative; }
+  .arr.ltr .ln::after, .arr.rtl .ln::after { content: ""; position: absolute; top: -5px; border: 6px solid transparent; }
+  .arr.ltr .ln::after { right: -2px; border-left-color: var(--fg); border-right: 0; }
+  .arr.rtl .ln::after { left: -2px; border-right-color: var(--fg); border-left: 0; }
+  .arr.self { border: 1px solid var(--fg); border-radius: 6px; margin: 0 6px; }
+  .arr.self .lbl { padding: 4px 6px; }
+  .num { display: inline-block; min-width: 1.5em; height: 1.5em; line-height: 1.5em; border-radius: 50%; background: var(--fg); color: var(--bg); font-size: 0.72rem; text-align: center; margin-right: 4px; }
+  .ctrl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 4px; }
+  button { font: inherit; font-size: 0.9rem; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+  button:hover { border-color: var(--accent); } button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .detail { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--bg); min-height: 120px; font-size: 0.93rem; }
+  /* simulator */
+  .sim { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 14px; margin: 16px 0; }
+  .ck { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 12px 0; }
+  .ck div { border: 2px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 0.82rem; transition: all .2s; }
+  .ck div b { font-family: ui-monospace, Menlo, monospace; display: block; }
+  .ck .sent { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
+  .ck .held { opacity: .45; } .ck .rej { border-style: dashed; opacity: .6; }
+  .ck .tag { font-weight: 700; } .ck .sent .tag { color: var(--ok); } .ck .held .tag, .ck .rej .tag { color: var(--ng); }
+  /* jwt */
+  .jwt { font: 0.8rem/1.6 ui-monospace, Menlo, monospace; word-break: break-all; background: var(--code); border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .j1 { color: var(--ng); } .j2 { color: var(--gh); } .j3 { color: var(--sb); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 10px 0; }
+  .cols > div { border-top: 4px solid; padding-top: 6px; font-size: 0.86rem; }
+  /* lifetimes */
+  .life { margin: 16px 0; } .life .r { display: grid; grid-template-columns: 250px 1fr; gap: 10px; align-items: center; margin: 7px 0; font-size: 0.86rem; }
+  .bar { width: max-content; max-width: 100%; height: 22px; border-radius: 5px; color: #fff; font-size: 0.74rem; line-height: 22px; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* quiz */
+  .q { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 14px 16px; margin: 16px 0; }
+  .q p.t { font-weight: 700; margin: 0 0 8px; }
+  .q button { display: block; width: 100%; text-align: left; margin: 6px 0; line-height: 1.6; }
+  .q button.right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--card)); }
+  .q button.wrong { border-color: var(--ng); background: color-mix(in srgb, var(--ng) 12%, var(--card)); }
+  .q .fb { margin-top: 8px; font-size: 0.92rem; min-height: 1.5em; }
+  @media (max-width: 640px) {
+    body { font-size: 16px; } .sys, .cols { grid-template-columns: 1fr; } .jar { grid-template-columns: 1fr; }
+    .life .r { grid-template-columns: 1fr; gap: 2px; } .arr .lbl { font-size: 0.68rem; } .lanes div { font-size: 0.68rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>認証トークンの地図<br><span style="font-size:.62em;font-weight:500">Cookie・OAuth 2.0・OIDC と、GitBox のログインで実際に起きていること</span></h1>
+<p class="lede">2026-10-11 作成。出発点の質問は二つでした。「GitHub の <code>user_session</code> とは何で、どこで手動で切れるのか」「セッションを持っているのは Supabase なのか、Next.js のサーバーなのか」。答えを先に言うと、<strong>似た顔をした証明書が三枚あり、発行者も保管場所も寿命も違います</strong>。このページはその三枚を一枚の地図に載せ、下で動いている仕組み（Cookie、OAuth 2.0、OIDC、JWT）を順に説明します。</p>
+<p class="small">ご質問の「OOS」は音声入力された <strong>OAuth</strong>（オーオース）と解釈しています。</p>
+
+<div class="callout">
+<strong>このページの主張には出どころの印が付いています</strong>
+<span class="badge b-m">実測</span> 今日このマシンで計測した結果（Chrome 154、ローカル Supabase、インストール済みライブラリ）。
+<span class="badge b-d">文書</span> 仕様書・公式ドキュメント（末尾にリンク）。
+<span class="badge b-c">コード</span> GitBox のリポジトリ（コミット <code>14885f4</code>）またはライブラリのソース。
+<span class="badge b-u">未確認</span> 確かめられなかったこと。何を調べれば確かめられるかも書いています。<br>
+Cookie やトークンの<strong>値</strong>は一切読み出していません。計測したのは名前・属性・長さだけです。
+</div>
+
+<nav class="toc">
+<strong>目次</strong>
+<ol>
+<li><a href="#bg">背景</a>：なぜ「証明書」が要るのか</li>
+<li><a href="#intuition">直感</a>：三枚の証明書</li>
+<li><a href="#mech">仕組み</a>
+  <ol>
+  <li><a href="#cookie">Cookie の特性</a>（操作できる計測結果つき）</li>
+  <li><a href="#oauth">OAuth 2.0</a>：権限を委ねる手続き</li>
+  <li><a href="#oidc">OIDC と JWT</a>：「誰か」を証明する層</li>
+  <li><a href="#flow">GitBox のログインを一歩ずつ</a></li>
+  <li><a href="#life">寿命と、手で切る場所</a></li>
+  </ol></li>
+<li><a href="#repo">このコードベースでは</a></li>
+<li><a href="#quiz">クイズ</a></li>
+<li><a href="#src">出典</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="bg">1. 背景</h2>
+
+<h3>1.1 基礎から（知っている人は <a href="#bg2">1.2</a> へ）</h3>
+<p>HTTP は記憶を持ちません。サーバーにとって、あなたの二回目のリクエストは見知らぬ誰かの一回目と区別がつきません。だから「さっきログインした本人です」という<strong>証拠</strong>を、リクエストのたびに添える必要があります。認証まわりの用語はほぼすべて、次の二つの問いへの答え方の違いです。</p>
+
+<h4>問い一：証拠をどう運ぶか</h4>
+<ul>
+<li><strong>Cookie</strong>：サーバーが一度預けると、ブラウザが条件に合うリクエストへ<em>自動で</em>添付します。人間が使う Web アプリ向きです。</li>
+<li><strong><code>Authorization</code> ヘッダー</strong>：プログラムが<em>明示的に</em>添付します（<code>Authorization: Bearer …</code>）。サーバー同士の API 呼び出し向きです。</li>
+</ul>
+
+<h4>問い二：証拠の中身は何か</h4>
+<ul>
+<li><strong>参照型</strong>：ただのランダムな番号です。サーバーが台帳を引いて「この番号は誰のものか」を調べます。台帳から消せば即座に無効になります。</li>
+<li><strong>自己完結型（JWT）</strong>：「私は誰で、いつまで有効か」を書いた申告書に、発行者が署名したものです。受け取った側は署名を確かめるだけでよく、台帳を引きません。速い代わりに、期限が来るまで取り消しにくくなります。</li>
+</ul>
+
+<div class="callout key">
+<strong>認証と認可は別の問い</strong>
+<strong>認証</strong>（authentication）は「あなたは誰か」。<strong>認可</strong>（authorization）は「何をしてよいか」。OAuth 2.0 は認可の仕組みで、OIDC がその上に認証を足します。この区別が 3.2 と 3.3 の軸になります。
+</div>
+
+<h3 id="bg2">1.2 今回の問いに直接関わる背景</h3>
+<p>GitBox で「GitHub でログイン」を一回押すと、三種類の証拠がまとめて動きます。ボタンは一つなのに登場人物は四者（ブラウザ、GitBox の Next.js サーバー、Supabase Auth、GitHub）で、ここが混乱のもとです。先の質問に対する短い答えは次のとおりです。</p>
+<ul>
+<li><code>user_session</code> は <strong>github.com 自身のログイン Cookie</strong> で、GitBox とも Supabase とも関係がありません。<span class="badge b-d">文書</span> GitHub は「This cookie is used to log you in.」と説明しています。</li>
+<li>GitBox のログイン状態を持っているのは <strong>Supabase</strong> です。Next.js のサーバーは何も覚えておらず、毎回 Cookie から読み直して検証しています。<span class="badge b-c">コード</span></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="intuition">2. 直感：三枚の証明書</h2>
+<p>会社のビルに例えます。あなたは三枚の紙を持ち歩いています。</p>
+<ol>
+<li><strong>GitHub の会員証</strong>（<code>user_session</code>）。GitHub 本店の受付で見せるもので、GitHub が発行し、GitHub だけが読めます。</li>
+<li><strong>GitBox の入館証</strong>（Supabase のセッション）。GitBox に入るたびに見せます。発行するのは GitBox ではなく、警備を請け負っている Supabase です。</li>
+<li><strong>GitHub の委任状</strong>（<code>gho_</code> で始まる API トークン）。「GitBox が私の代わりにリポジトリを見てよい」と GitHub が発行した書類です。使うのはあなたではなく GitBox です。</li>
+</ol>
+<p>ログイン一回を一文にするとこうなります。<strong>会員証①で GitHub が本人を確かめ、委任状③を Supabase に渡し、Supabase が入館証②を作り、GitBox は②と③をブラウザの Cookie に預ける。</strong> 以後のリクエストに①は登場しません。</p>
+
+<div class="sys" aria-label="誰が何を持つかの図">
+  <div class="actor gh"><h5 style="color:var(--gh)">GitHub</h5>
+    <div class="small">台帳：会員証①のセッション、委任状③の発行記録</div>
+    <span class="chip gh">github.com（ログイン）</span><span class="chip gh">api.github.com（API）</span></div>
+  <div class="actor sb"><h5 style="color:var(--sb)">Supabase Auth</h5>
+    <div class="small">台帳：ユーザー、セッション、refresh token。署名鍵で②の JWT に署名</div>
+    <span class="chip sb">auth.users</span><span class="chip sb">auth.sessions</span></div>
+  <div class="actor nx"><h5 style="color:var(--nx)">GitBox（Next.js / Vercel）</h5>
+    <div class="small"><strong>台帳なし。</strong>毎リクエスト Cookie を読み、②の署名を確かめ、③を GitHub API に渡すだけ</div></div>
+  <div class="actor br"><h5 style="color:var(--br)">あなたのブラウザ（Cookie 入れ）</h5>
+    <div class="jar">
+      <div><div class="small">github.com 宛て</div>
+        <span class="chip gh">① user_session = 48 文字の番号</span></div>
+      <div><div class="small">gitbox-laststance.vercel.app 宛て</div>
+        <span class="chip sb">② sb-&lt;ref&gt;-auth-token.0 / .1 = セッション一式（JWT＋refresh token）</span>
+        <span class="chip nx">③ gh_token_&lt;ref8&gt; = gho_…（40 文字）</span></div>
+    </div>
+    <div class="small" style="margin-top:6px">ブラウザは「宛先のホスト」ごとに Cookie を分けて保管し、そのホストへのリクエストにだけ添付します。だから①が GitBox に送られることはなく、②③が GitHub に送られることもありません。</div>
+  </div>
+</div>
+
+<div class="scroll"><table>
+<tr><th></th><th>① GitHub の会員証</th><th>② GitBox の入館証</th><th>③ GitHub の委任状</th></tr>
+<tr><th>正体</th><td>github.com のログインセッション</td><td>Supabase のセッション（access token JWT＋refresh token）</td><td>OAuth の access token</td></tr>
+<tr><th>発行者</th><td>GitHub</td><td>Supabase Auth</td><td>GitHub（OAuth App 向け）</td></tr>
+<tr><th>型</th><td>参照型と推測 <span class="badge b-u">未確認</span></td><td>自己完結型（JWT）<span class="badge b-m">実測</span></td><td>参照型（<code>gho_</code>＋36 文字）<span class="badge b-m">実測</span></td></tr>
+<tr><th>誰が検証するか</th><td>GitHub</td><td>GitBox が署名を検証（鍵は Supabase が公開）</td><td>GitHub（API 呼び出しのたび）</td></tr>
+<tr><th>答える問い</th><td>github.com でのあなたは誰か</td><td>GitBox でのあなたは誰か</td><td>GitBox は GitHub で何をしてよいか</td></tr>
+</table></div>
+<p class="small">①を参照型と推測する根拠は長さだけです（48 文字。JWT なら数百文字になる）。中身は読んでいません。</p>
+
+<!-- ============================================================ -->
+<h2 id="mech">3. 仕組み</h2>
+<p>三枚の紙を運んでいるのは Cookie で、③を発行する手続きが OAuth 2.0、②の中身の形式が JWT（OIDC で広まった形式）です。下から順に積み上げます。</p>
+
+<h3 id="cookie">3.1 Cookie の特性</h3>
+<p>Cookie は、サーバーが <code>Set-Cookie</code> ヘッダーで預け、ブラウザが条件に合うリクエストへ自動で添付する小さな文字列です。「自動で添付される」ことが便利さの源であり、危険の源でもあります。<span class="badge b-d">文書</span> RFC 6265 はこれを ambient authority（その場にあるだけで効く権限）と呼び、CSRF の原因だと述べています（§8.2）。属性はすべて、<strong>いつ添付するか・誰が読めるか</strong>を絞るためのものです。</p>
+
+<div class="scroll"><table>
+<tr><th>属性</th><th>何を絞るか</th><th>要点 <span class="badge b-d">文書</span>（MDN）</th></tr>
+<tr><td><code>HttpOnly</code></td><td>誰が読めるか</td><td>JavaScript（<code>document.cookie</code>）から読めなくなる。<strong>リクエストには付く。</strong></td></tr>
+<tr><td><code>Secure</code></td><td>どの通信に付くか</td><td><code>https:</code> のときだけ送る。<code>localhost</code> は例外。</td></tr>
+<tr><td><code>SameSite</code></td><td>どこ発のリクエストに付くか</td><td><code>Strict</code>：同一サイト発のみ。<code>Lax</code>：それに加えて、クロスサイトでも「トップレベルの画面遷移」かつ安全なメソッド（GET）なら付く。<code>None</code>：常に付く（<code>Secure</code> 必須）。</td></tr>
+<tr><td><code>Domain</code></td><td>どのホストに付くか</td><td>省略するとセットしたホスト限定（host-only）。指定するとサブドメインにも付く。</td></tr>
+<tr><td><code>Path</code></td><td>どのパスに付くか</td><td>セキュリティ目的の仕組みではない、と明記されている。</td></tr>
+<tr><td><code>Max-Age</code> / <code>Expires</code></td><td>いつまで残るか</td><td>どちらも無ければ「セッション Cookie」。ブラウザを閉じると消える（復元機能で残ることもある）。</td></tr>
+<tr><td><code>__Host-</code> 接頭辞</td><td>名前による自己申告</td><td><code>Secure</code> 必須、<code>Domain</code> 禁止、<code>Path=/</code> 必須。条件を破るとブラウザが受け取らない。</td></tr>
+</table></div>
+
+<h4>実際に測る</h4>
+<p>文章だけでは <code>Lax</code> の境界がつかみにくいので、二つのホストを立てて測りました。サイト A（<code>http://localhost:4801</code>）で 8 個の Cookie をセットし、いろいろな種類のリクエストに<strong>どの Cookie が付いて届いたか</strong>をサーバー側で記録しています。サイト B は <code>http://127.0.0.1:4802</code> で、A から見て別サイトです。下のボタンで切り替えてください。</p>
+
+<div class="sim">
+  <div class="ctrl" id="simBtns"></div>
+  <div class="ck" id="simCookies"></div>
+  <div class="detail" id="simNote"></div>
+  <p class="small"><span class="badge b-m">実測</span> HeadlessChrome 154、2026-10-11。緑＝サーバーに届いた、薄い＝届かなかった、点線＝そもそもブラウザが保存を拒否した。</p>
+</div>
+
+<p>この計測から、あとで効いてくる事実が六つ取り出せます。</p>
+<ol>
+<li><strong>ブラウザは条件を満たさない Cookie を黙って捨てる。</strong> <code>SameSite=None</code> なのに <code>Secure</code> が無いもの、<code>__Host-</code> なのに <code>Domain</code> を付けたものは保存されませんでした。エラーは出ません。</li>
+<li><strong><code>HttpOnly</code> は「読めない」であって「送られない」ではない。</strong> <code>document.cookie</code> に <code>honly</code> は現れませんが、<code>fetch</code> には付いて届きました。XSS でトークンを<em>盗み出す</em>ことは防げますが、XSS がそのページから<em>リクエストを送る</em>ことは防げません。</li>
+<li><strong>Cookie はポートを区別しない。</strong> <code>localhost:4801</code> でセットした 6 個すべてが <code>localhost:4802</code> に届きました。<span class="badge b-d">文書</span> RFC 6265 §8.5「Cookies do not provide isolation by port.」</li>
+<li><strong>別サイトからの <code>fetch</code> には <code>SameSite=None</code> しか付かない。</strong> 他人のサイトがこっそりあなたの権限で API を叩く攻撃（CSRF）への、ブラウザ側の既定の防御です。</li>
+<li><strong>別サイトからのリンク遷移（トップレベルの GET）には <code>Strict</code> 以外すべて付く。</strong> ここが OAuth を成立させる要です。GitHub から GitBox へ戻ってくるリダイレクトはまさにこの種類のリクエストで、<code>Lax</code> の Cookie（PKCE の合言葉を入れたもの）が付いて届くからログインが完了します。<code>Strict</code> にしていたら届きません。</li>
+<li><strong>「属性なし」は <code>Lax</code> と同じではない。</strong> セット直後の 2 分間だけ、<code>SameSite</code> 無指定の Cookie は別サイトからの POST にも付きました。130 秒後には付かなくなりました。明示的に <code>SameSite=Lax</code> と書いた Cookie は、直後でも付きませんでした。<span class="badge b-d">文書</span> MDN も「set no more than two minutes before」と書いています。</li>
+</ol>
+
+<div class="callout key">
+<strong>「サイト」と「オリジン」は違う</strong>
+オリジンはスキーム＋ホスト＋ポートの組です。サイトはもっと粗く、ざっくり言えば「登録できるドメイン」の単位です。<code>SameSite</code> が見るのはサイトで、Cookie の保管単位はホストです。だから <code>localhost:3008</code>（GitBox）と <code>localhost:54321</code>（ローカル Supabase）は別オリジンですが同一サイトで、Cookie 入れも共有します。
+</div>
+
+<h4>大きさと寿命</h4>
+<ul>
+<li><span class="badge b-d">文書</span> ブラウザは Cookie 1 個あたり少なくとも 4096 バイトを扱えるべき、と RFC 6265 §6.1 が定めています。保証されているのはここまでなので、これを超える値は 1 個の Cookie には入らないものとして設計します。</li>
+<li><span class="badge b-c">コード</span><span class="badge b-m">実測</span> Supabase のセッションは 1 個に収まらないので、<code>@supabase/ssr</code> 0.12.7 は 3180 文字ごとに分割します（<code>MAX_CHUNK_SIZE = 3180</code>）。本番の Cookie を測ると、<code>…auth-token.0</code> がちょうど 3180 文字、<code>.1</code> が残りの 781 文字でした。</li>
+<li><span class="badge b-c">コード</span><span class="badge b-m">実測</span> 同ライブラリの既定の <code>maxAge</code> は 400 日で、計測した Cookie の残り寿命も最大 400 日でした。ソースのコメントは Chrome の上限を理由に挙げています。<span class="badge b-u">未確認</span> Chrome の上限そのものは今回測っていません（401 日を指定した Cookie の <code>expires</code> を読めば確かめられます）。</li>
+</ul>
+
+<h3 id="oauth">3.2 OAuth 2.0：権限を委ねる手続き</h3>
+<p>Cookie が運び屋だとすると、OAuth 2.0 は「委任状」を安全に発行する窓口の手順書です。<span class="badge b-d">文書</span> RFC 6749 の言葉では、第三者のアプリが HTTP サービスへの「limited access」を得るための枠組みです。合言葉は<strong>パスワードを渡さずに、権限の一部だけを渡す</strong>。</p>
+
+<div class="scroll"><table>
+<tr><th>RFC 6749 の役割</th><th>定義 <span class="badge b-d">文書</span></th><th>GitBox では</th></tr>
+<tr><td>Resource owner</td><td>保護された資源へのアクセスを許可できる存在</td><td>あなた</td></tr>
+<tr><td>Client</td><td>resource owner の許可を得て、代わりに資源へリクエストするアプリ</td><td>GitHub に登録した OAuth App「GitBox Tokyo」。秘密鍵を持って実際に GitHub と話すのは Supabase Auth</td></tr>
+<tr><td>Authorization server</td><td>本人を確かめ、許可を得て、access token を発行するサーバー</td><td><code>github.com/login/oauth/…</code></td></tr>
+<tr><td>Resource server</td><td>資源を持ち、access token つきのリクエストに応えるサーバー</td><td><code>api.github.com</code></td></tr>
+</table></div>
+
+<h4>なぜ「コード」を一度はさむのか</h4>
+<p>Authorization Code Grant は、ブラウザを経由する表の道と、サーバー同士の裏の道を使い分けます。ブラウザの URL に載るのは 10 分で失効する引換券（<code>code</code>）だけで、本物のトークンは裏の道でしか流れません。<span class="badge b-d">文書</span> GitHub の code は「will expire after 10 minutes」です。</p>
+
+<div class="seq">
+  <div class="lanes"><div class="l0">ブラウザ</div><div class="l1">Client</div><div class="l2">Authorization server</div><div class="l3">Resource server</div></div>
+  <div class="row"><div class="arr ltr" style="grid-column:1/4;--n:3"><span class="lbl"><span class="num">A</span>認可エンドポイントへ送り出す（<code>client_id</code>, <code>scope</code>, <code>state</code>, <code>redirect_uri</code>）</span><div class="ln"></div></div></div>
+  <div class="row"><div class="arr self" style="grid-column:3/4"><span class="lbl"><span class="num">B</span>本人確認と同意</span></div></div>
+  <div class="row"><div class="arr rtl" style="grid-column:2/4;--n:2"><span class="lbl"><span class="num">C</span>ブラウザ経由で戻す：<code>?code=…&amp;state=…</code></span><div class="ln"></div></div></div>
+  <div class="row"><div class="arr ltr" style="grid-column:2/4;--n:2"><span class="lbl"><span class="num">D</span>裏の道：<code>code</code>＋<code>client_secret</code> を提示</span><div class="ln"></div></div></div>
+  <div class="row"><div class="arr rtl" style="grid-column:2/4;--n:2"><span class="lbl"><span class="num">E</span>access token（と、あれば refresh token）</span><div class="ln"></div></div></div>
+  <div class="row"><div class="arr ltr" style="grid-column:2/5;--n:3"><span class="lbl">以後：<code>Authorization: Bearer &lt;access token&gt;</code></span><div class="ln"></div></div></div>
+</div>
+<p class="small"><span class="badge b-d">文書</span> RFC 6749 §4.1 の (A)〜(E)。C の矢印は実際にはブラウザのリダイレクトを通ります。</p>
+
+<h4>二つの安全装置：<code>state</code> と PKCE</h4>
+<ul>
+<li><strong><code>state</code></strong>：行きに付けた推測不能な値が、帰りにも同じ値で付いているかを確かめます。<span class="badge b-d">文書</span> GitHub の説明では CSRF 対策で、一致しなければ「you should abort the process」。攻撃者が自分の <code>code</code> を被害者のブラウザに踏ませて、被害者を攻撃者のアカウントにログインさせる攻撃を防ぎます。</li>
+<li><strong>PKCE</strong>（ピクシー、RFC 7636）：引換券の横取りへの対策です。クライアントは最初にランダムな合言葉 <code>code_verifier</code> を作って手元に置き、そのハッシュだけを先に送ります。引換のときに合言葉そのものを出し、サーバーが照合します。</li>
+</ul>
+<pre><code>code_challenge = BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))   // RFC 7636 §4.2
+
+行き:   code_challenge を送る（ハッシュなので見られても困らない）
+帰り:   code を受け取る
+引換:   code と code_verifier を送る
+検証:   サーバーが同じ式で計算し、行きの code_challenge と一致するか確かめる</code></pre>
+<p><span class="badge b-m">実測</span> <code>supabase-js</code> に実際に認可 URL を作らせると、<code>code_challenge</code> は 43 文字（32 バイトの SHA-256 を base64url にした長さ）、<code>code_challenge_method</code> は <code>s256</code> でした。合言葉は <code>sb-&lt;ref&gt;-auth-token-flow-&lt;id&gt;-code-verifier</code> という名前で保存されます。サーバー側のフローでは保存先が Cookie なので、3.1 の「リンク遷移には <code>Lax</code> が付く」がここで効きます。</p>
+
+<h4>GitHub の OAuth App に固有の事実 <span class="badge b-d">文書</span></h4>
+<ul>
+<li>トークン交換には <code>client_secret</code> が必須です。秘密を持てるサーバー側クライアント（confidential client）が前提です。</li>
+<li>応答は <code>access_token=gho_…&amp;scope=…&amp;token_type=bearer</code>。<strong><code>id_token</code> はありません</strong>（3.3 で効いてきます）。</li>
+<li>スコープ <code>repo</code> は「full access to public and private repositories including read and write access to code」。GitBox が要求しているのはこれです。ただし「They do not grant any additional permission beyond that which the user already has」。</li>
+<li>OAuth App のトークンに有効期限の記載はありません。失効するのは、1 年間使われなかったとき、同じユーザー・アプリ・スコープの組で 10 個を超えたとき（古いものから）、ユーザーまたはアプリ所有者が取り消したとき、公開リポジトリに push されたときです。</li>
+<li>比較：GitHub <em>App</em> のユーザートークンは既定で 8 時間で切れ、refresh token で更新します。OAuth App とは別物です。</li>
+</ul>
+
+<div class="callout myth">
+<strong>よくある誤解：「OAuth でログインする」</strong>
+OAuth 2.0 が発行するのは委任状であって、身分証ではありません。access token は「この持ち主は GitHub でこれをしてよい」としか言っておらず、RFC 6749 も「usually opaque to the client」と書いています。クライアントは中身を読めないのです。それでも「GitHub でログイン」が成り立つのは、受け取った委任状で <code>GET /user</code> を呼び、返ってきた答えを本人情報として扱っているからです。この「委任状で本人情報を聞きに行く」部分を標準化したものが、次の OIDC です。
+</div>
+
+<h3 id="oidc">3.3 OIDC と JWT：「誰か」を証明する層</h3>
+<p><span class="badge b-d">文書</span> OpenID Connect は自分を「a simple identity layer on top of the OAuth 2.0 protocol」と定義しています。OAuth の手順はそのままに、三つを足します。</p>
+<ol>
+<li>リクエストに <code>openid</code> スコープを入れる（「MUST contain the openid scope value」）。</li>
+<li>トークン応答に <strong>ID Token</strong> が加わる。これは「誰が、いつ、どこで認証されたか」を書いた JWT です。</li>
+<li>追加の本人情報を返す UserInfo エンドポイント。</li>
+</ol>
+
+<div class="scroll"><table>
+<tr><th>ID Token の必須クレーム</th><th>意味 <span class="badge b-d">文書</span></th><th>クライアントが確かめること</th></tr>
+<tr><td><code>iss</code></td><td>発行者</td><td>期待する発行者と完全一致するか</td></tr>
+<tr><td><code>sub</code></td><td>発行者の中で一意で、再割り当てされない利用者 ID</td><td>—（これがユーザーの主キーになる）</td></tr>
+<tr><td><code>aud</code></td><td>宛先。クライアントの <code>client_id</code> を含まなければならない</td><td>自分宛てか。違えば拒否</td></tr>
+<tr><td><code>exp</code> / <code>iat</code></td><td>失効時刻 / 発行時刻</td><td>現在時刻が <code>exp</code> より前か</td></tr>
+<tr><td><code>nonce</code></td><td>リクエストと ID Token を結びつける値</td><td>自分が送った値と同じか（再送攻撃対策）</td></tr>
+</table></div>
+
+<h4>JWT を分解する</h4>
+<p>JWT はピリオドで区切った三つの部分です。ローカルの Supabase に使い捨てのユーザーを作り、発行された access token を分解しました（ユーザーは計測後に削除済み）。</p>
+<div class="jwt"><span class="j1">eyJhbGciOiJFUzI1NiIsImtpZCI6…</span>.<span class="j2">eyJpc3MiOiJodHRwOi8vMTI3LjAuMC4xOjU0MzIxL2F1dGgvdjEiLCJzdWIiOi…</span>.<span class="j3">（64 バイトの署名）</span></div>
+<div class="cols">
+  <div style="border-color:var(--ng)"><strong>ヘッダー</strong><pre><code>{ "alg": "ES256",
+  "kid": "b81269f1-…",
+  "typ": "JWT" }</code></pre>署名方式と、どの鍵で署名したか。</div>
+  <div style="border-color:var(--gh)"><strong>ペイロード</strong><pre><code>{ "iss": "http://127.0.0.1:54321/auth/v1",
+  "sub": "b7275ba9…",
+  "aud": "authenticated",
+  "exp": 1791717125,
+  "iat": 1791713525,
+  "role": "authenticated",
+  "session_id": "138630b5…",
+  "aal": "aal1", "amr": […],
+  "email": "…", "is_anonymous": false }</code></pre>申告内容。<strong>暗号化はされていません。</strong>base64 を戻せば誰でも読めます。</div>
+  <div style="border-color:var(--sb)"><strong>署名</strong><p>ヘッダーとペイロードを Supabase の秘密鍵で署名したもの。対になる公開鍵は誰でも取得できます。</p></div>
+</div>
+<p><span class="badge b-m">実測</span> 全体で 942 文字、<code>exp − iat</code> は 3600 秒でした。公開鍵は <code>/auth/v1/.well-known/jwks.json</code> にあり、同じ <code>kid</code> の ES256（P-256）鍵が載っていました。受け取った側はこの公開鍵で署名を確かめるだけでよく、Supabase に問い合わせる必要がありません。これが「自己完結型」の意味です。</p>
+
+<div class="callout warn">
+<strong>JWT は封筒ではなく、署名入りのはがき</strong>
+署名が保証するのは「書き換えられていない」ことだけで、「読まれない」ことではありません。JWT に秘密を入れてはいけませんし、JWT そのものが盗まれれば期限までそのまま使えます。
+</div>
+
+<h4>GitHub ログインは OIDC ではない</h4>
+<p>ここまで来ると、GitBox のログインの位置づけがはっきりします。</p>
+<ul>
+<li><span class="badge b-d">文書</span><span class="badge b-c">コード</span> GitHub の OAuth App の応答に ID Token はなく、Supabase Auth の GitHub プロバイダーも <code>openid</code> スコープや ID Token を扱いません。代わりに、受け取った access token で <code>api.github.com/user</code> と <code>/user/emails</code> を呼んで本人情報を得ます（ソース <code>internal/api/provider/github.go</code>）。</li>
+<li><span class="badge b-m">実測</span> その痕跡はスコープに出ます。GitBox が頼んだのは <code>read:user user:email repo</code> ですが、Supabase が GitHub に送った URL のスコープは <code>user:email read:user user:email repo</code> でした。先頭の <code>user:email</code> は Supabase が自分のために足したものです。</li>
+<li>つまり流れは「OAuth 2.0 ＋ API 呼び出し」です。一方、Supabase が GitBox に渡す入館証②は JWT で、形式としては ID Token の親戚です。<strong>GitHub との間は OAuth、Supabase との間は JWT</strong>、と覚えておくと混ざりません。</li>
+</ul>
+
+<h4>OIDC は人間だけのものではない</h4>
+<p>OIDC の ID Token は「この実行環境は誰か」の証明にも使われます。<span class="badge b-d">文書</span> Vercel は関数のリクエストに <code>x-vercel-oidc-token</code> ヘッダーで JWT を渡します。<code>iss</code> は <code>https://oidc.vercel.com/[TEAM_SLUG]</code>、<code>sub</code> は <code>owner:[TEAM_SLUG]:project:[PROJECT_NAME]:environment:[ENVIRONMENT]</code> です。AWS などがこの発行者を信頼するよう設定しておくと、長期の秘密鍵を置かずにクラウドの権限を借りられます。</p>
+<div class="callout unv">
+<strong>未確認：GitBox のプロキシがこのヘッダーを受け取るか</strong>
+今回の PR のレビューで「Sentry トンネルが Cookie 以外のヘッダーをすべて転送している」という指摘が出たのは、この種のヘッダーが紛れ込みうるからです。<code>src/proxy.ts</code> の実行時に <code>x-vercel-oidc-token</code> が実際に付いているかは確かめていません。プレビュー環境でヘッダー名の一覧だけをログに出せば確かめられます。
+</div>
+
+<h3 id="flow">3.4 GitBox のログインを一歩ずつ</h3>
+<p>部品が揃ったので、ボタンを押してからボードが表示されるまでを通しで追います。ここには<strong>入れ子になった二つの OAuth</strong> があります。外側は GitBox と Supabase の間（PKCE つき）、内側は Supabase と GitHub の間（<code>client_secret</code> つき）です。「次へ」で進めてください。</p>
+
+<div class="seq">
+  <div class="lanes"><div class="l0">ブラウザ</div><div class="l1">GitBox（Next.js）</div><div class="l2">Supabase Auth</div><div class="l3">GitHub</div></div>
+  <div id="flowRows"></div>
+  <div class="ctrl">
+    <button id="prev">← 前へ</button><button id="next" class="on">次へ →</button><button id="all">すべて表示</button>
+    <span class="small" id="pos"></span>
+  </div>
+  <div class="detail" id="flowDetail"></div>
+</div>
+
+<div class="callout key">
+<strong>二つの質問への、仕組みからの答え</strong>
+<strong>セッションを持っているのは誰か。</strong> Supabase です。台帳（<code>auth.sessions</code>）と署名鍵を持っています。Next.js のサーバーが持っているのは、公開鍵で署名を確かめる能力だけです。Vercel の関数はリクエストごとに使い捨てなので、覚えておく場所がそもそもありません。<br>
+<strong>GitHub のトークンはなぜ Cookie にあるのか。</strong> <span class="badge b-d">文書</span> Supabase は「Provider tokens are intentionally not stored in your project's database」と明言しています。ログイン直後の一度しか手に入らないので、GitBox がその場で Cookie に預けています。
+</div>
+
+<h3 id="life">3.5 寿命と、手で切る場所</h3>
+<p>三枚の紙と、その発行に使われる引換券は、寿命が四桁違います。短いものほど盗まれても被害が小さく、長いものほど「切る手段」が大事になります。</p>
+
+<div class="life">
+  <div class="r"><div>GitHub の認可コード <span class="badge b-d">文書</span></div><div class="bar" style="min-width:9%;background:var(--gh)">10 分</div></div>
+  <div class="r"><div>Supabase の認可コード <span class="badge b-d">文書</span></div><div class="bar" style="min-width:7%;background:var(--sb)">5 分・1 回</div></div>
+  <div class="r"><div>② の access token（JWT）<span class="badge b-m">実測</span></div><div class="bar" style="min-width:16%;background:var(--sb)">3600 秒</div></div>
+  <div class="r"><div>① <code>user_session</code> <span class="badge b-d">文書</span><span class="badge b-m">実測</span></div><div class="bar" style="min-width:40%;background:var(--gh)">2 週間（計測時 残り 13 日）</div></div>
+  <div class="r"><div>③ の Cookie <span class="badge b-c">コード</span><span class="badge b-m">実測</span></div><div class="bar" style="min-width:55%;background:var(--nx)">30 日</div></div>
+  <div class="r"><div>② の Cookie <span class="badge b-c">コード</span><span class="badge b-m">実測</span></div><div class="bar" style="min-width:86%;background:var(--sb)">400 日</div></div>
+  <div class="r"><div>② の refresh token <span class="badge b-d">文書</span></div><div class="bar" style="min-width:100%;background:var(--sb)">期限なし。ただし 1 回使い切り</div></div>
+  <div class="r"><div>③ のトークン本体 <span class="badge b-d">文書</span></div><div class="bar" style="min-width:100%;background:var(--gh)">期限の定めなし。1 年未使用で失効</div></div>
+</div>
+<p class="small">棒の長さは対数的な目安で、正確な比ではありません。</p>
+
+<h4>入館証②の一生</h4>
+<p>②は「短命な JWT」と「長命な refresh token」の二人組です。JWT が切れそうになると、refresh token を新しい二人組と交換します。<span class="badge b-d">文書</span> refresh token は「never expire but can only be used once」。使用済みのものがもう一度使われたら、盗まれたと見なしてセッション全体を終了させます（同時リクエストのための猶予は既定 10 秒。<span class="badge b-c">コード</span> ローカルの <code>config.toml</code> も <code>refresh_token_reuse_interval = 10</code>）。</p>
+<div class="sys" style="grid-template-columns:1fr 1fr 1fr">
+  <div class="actor sb"><h5>有効</h5><div class="small">JWT の署名と <code>exp</code> が通る。GitBox は Supabase に問い合わせない</div></div>
+  <div class="actor sb"><h5>更新</h5><div class="small">期限が近づくと refresh token を交換。新しい JWT と新しい refresh token が Cookie に上書きされる</div></div>
+  <div class="actor" style="border-color:var(--ng)"><h5>終了</h5><div class="small">サインアウトでセッション行が削除され、refresh token は使えなくなる</div></div>
+</div>
+<div class="callout unv">
+<strong>未確認：サインアウト後、発行済みの JWT はいつまで通るか</strong>
+Supabase の文書は明言していませんが、強く示唆しています。サインアウトを検知したければ「<code>session_id</code> クレームが <code>auth.sessions</code> の行に対応するか確認できる」とあり、それは「最も機微な操作にだけ」使うよう勧めています。裏を返せば、署名だけを見ている限り JWT は <code>exp</code>（最長 1 時間）まで通るはずです。確かめるには、ローカルでログイン → access token を控える → サインアウト → その token で保護されたページを叩く、で分かります。
+</div>
+
+<h4>手で切る場所</h4>
+<div class="scroll"><table>
+<tr><th></th><th>どこで切るか</th><th>切ると何が起きるか</th></tr>
+<tr><td>① 会員証</td><td><a href="https://github.com/settings/sessions">github.com/settings/sessions</a> で該当セッションを Revoke。またはそのブラウザで GitHub からサインアウト</td><td>そのブラウザの github.com がログアウト状態になる。②③は別の紙なので影響しない（仕組みからの帰結。計測はしていません）</td></tr>
+<tr><td>② 入館証</td><td>GitBox の Sign out。<span class="badge b-c">コード</span> <code>supabase.auth.signOut()</code> を呼び、③の Cookie も消す</td><td>Supabase 側のセッション行が削除され、refresh token が無効になる。③のトークン自体は GitHub 上で生き続ける</td></tr>
+<tr><td>③ 委任状</td><td><a href="https://github.com/settings/applications">github.com/settings/applications</a> の Authorized OAuth Apps で Revoke</td><td><span class="badge b-d">文書</span> そのアプリに紐づくトークンがすべて失効する。GitBox は次の API 呼び出しで失敗し、再認可に進む</td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2 id="repo">4. このコードベースでは</h2>
+<p>ここまでの一般論が、GitBox のどの行に現れているかです。行番号はコミット <code>14885f4</code> のものです。</p>
+
+<div class="scroll"><table>
+<tr><th>役割</th><th>場所</th><th>していること</th></tr>
+<tr><td>ログイン開始</td><td><code>src/lib/actions/auth.ts:52-58</code></td><td><code>signInWithOAuth({ provider: 'github', options: { redirectTo: `${origin}/auth/callback`, scopes: 'read:user user:email repo' } })</code></td></tr>
+<tr><td>コールバック</td><td><code>src/app/auth/callback/route.ts:36</code></td><td><code>exchangeCodeForSession(code)</code>。PKCE の引換</td></tr>
+<tr><td>③を預ける</td><td><code>route.ts:47-49</code>、<code>src/lib/constants/cookies.ts:71-79</code></td><td><code>data.session?.provider_token</code> を <code>gh_token_&lt;ref8&gt;</code> に保存。<code>httpOnly: true</code>、<code>secure</code> は本番のみ、<code>sameSite: 'lax'</code>、30 日</td></tr>
+<tr><td>毎リクエストの検証</td><td><code>src/proxy.ts:128-135</code></td><td><code>supabase.auth.getClaims()</code> で JWT を検証し、<code>exp</code> を確かめる。失敗なら <code>/login</code> へ</td></tr>
+<tr><td>③を使う</td><td><code>src/lib/axios-github.ts:57-63</code></td><td>Cookie から読んで GitHub API に渡す。保存先は Cookie だけ</td></tr>
+<tr><td>③が無いとき</td><td><code>src/app/api/auth/github/refresh/route.ts</code></td><td>②が生きていれば OAuth をやり直す。<code>getUser()</code>（:119）で Supabase に確認、再試行は <code>MAX_REFRESH_ATTEMPTS = 1</code>（:48）</td></tr>
+<tr><td>サインアウト</td><td><code>auth.ts:88-102</code></td><td><code>supabase.auth.signOut()</code> と <code>deleteGitHubTokenCookie()</code>。GitHub のトークン取り消し API は呼んでいない</td></tr>
+</table></div>
+
+<h3>本番の Cookie を測ると</h3>
+<p><span class="badge b-m">実測</span> <code>gitbox-laststance.vercel.app</code> 宛ての Cookie の名前・属性・長さです（値は読んでいません）。</p>
+<div class="scroll"><table>
+<tr><th>名前</th><th>HttpOnly</th><th>Secure</th><th>SameSite</th><th>残り</th><th>長さ</th></tr>
+<tr><td><code>sb-zfcw…-auth-token.0</code> / <code>.1</code></td><td>なし</td><td>なし</td><td>Lax</td><td>400 日</td><td>3180＋781</td></tr>
+<tr><td><code>sb-zfcw…-auth-token-flow-&lt;id&gt;-code-verifier</code>（2 個）ほか</td><td>なし</td><td>なし</td><td>Lax</td><td>約 400 日</td><td>159＋159＋102</td></tr>
+<tr><td><code>sb-mfee…-auth-token.0</code> / <code>.1</code></td><td>なし</td><td>なし</td><td>Lax</td><td>347 日</td><td>3180＋638</td></tr>
+<tr><td><code>gh_token_zfcw…</code></td><td><strong>あり</strong></td><td><strong>あり</strong></td><td>Lax</td><td>30 日</td><td>40</td></tr>
+</table></div>
+
+<p>この表と 3 章を突き合わせると、気づくことが四つあります。</p>
+<ol>
+<li><strong>入館証②は JavaScript から読める。</strong> <code>HttpOnly</code> も <code>Secure</code> も付いていません。これは GitBox の設定ではなく <code>@supabase/ssr</code> の既定値どおりです（<span class="badge b-c">コード</span> <code>DEFAULT_COOKIE_OPTIONS = { path: "/", sameSite: "lax", httpOnly: false, maxAge: 400 日 }</code>）。ブラウザ側の Supabase クライアントが Cookie を読めるようにするための既定です。3.1 の事実 2 のとおり、XSS があればセッション一式（refresh token を含む）を持ち出せます。<code>Secure</code> が無い点は、HSTS（<code>next.config.ts:43-44</code>、2 年・preload）が補っています。</li>
+<li><strong>古いプロジェクトの入館証が残っている。</strong> 参照 ID が <code>mfee…</code> の組は現在の <code>zfcw…</code> とは別物です。残りは 347 日なので、最後に書き込まれたのは約 53 日前（8 月 19 日ごろ）で、8 月 25 日に本番 Supabase を東京へ移す直前にあたります。もう使われませんが、ブラウザは律儀に毎リクエスト約 3.8KB を送り続けています。Supabase 関連だけで合計 8,199 文字です。</li>
+<li><strong>委任状③は正しく守られている。</strong> <code>HttpOnly</code>・<code>Secure</code>・<code>Lax</code>。<code>repo</code> スコープ（全リポジトリの読み書き）を持つ 40 文字なので、三枚の中で最も強く守るべきものです。</li>
+<li><strong>PKCE の合言葉がログイン後も残っている。</strong> 完了済みフローの <code>code-verifier</code> が 2 個、約 400 日の寿命で残っていました。code は 1 回しか引き換えられないので害はないはずですが、片付けられてはいません。</li>
+</ol>
+
+<div class="callout unv">
+<strong>未確認：②の Cookie に <code>HttpOnly</code> を付けられるか</strong>
+grep した限り、ブラウザ側クライアント（<code>createBrowserClient</code>）を定義している <code>src/lib/supabase/client.ts</code> を、アプリのコードは読み込んでいません。そうであれば <code>createServerClient</code> の <code>cookieOptions</code> で <code>httpOnly: true, secure: true</code> を指定できる可能性があります。ただし、そのオプションがサーバー側でセットされる全 Cookie に効くか、PKCE フローやトークン更新が壊れないかは確かめていません。ローカルで設定を入れてログイン → 更新 → サインアウトを通せば分かります。
+</div>
+<div class="callout unv">
+<strong>仮説：古い Cookie と「Request Header Or Cookie Too Large」</strong>
+今回の PR の前、本番の Sentry トンネルは Cookie つきのリクエストに 400「Request Header Or Cookie Too Large」を返していました。当時のトンネルは Cookie をそのまま Sentry に転送していたので、8KB を超える Cookie ヘッダーが原因だった可能性があります。因果は確かめていません。今は転送前に Cookie を外しているので、この経路では起きません。
+</div>
+
+<h3>ローカル開発で起きること</h3>
+<p><span class="badge b-m">実測</span> <code>http://localhost:3008</code> 宛ての Cookie を数えると 21 個あり、GitBox のものは一部でした。残りは同じマシンで動かした別のアプリ（Auth.js 系、Clerk 系など）のものです。3.1 の事実 3 のとおり、<code>localhost</code> の Cookie 入れは全ポート共有なので、GitBox の開発サーバーには他のアプリのセッション Cookie も届いています。逆も同じです。害が出る場面は限られますが、「ローカルで妙にヘッダーが大きい」「別アプリのログインが混ざる」ときの原因になります。アプリごとに <code>127.0.0.1</code> と <code>localhost</code> を使い分けるか、<code>*.localhost</code> のサブドメインを使うと分かれます。</p>
+
+<h3>今回の露出はどれだったか</h3>
+<p>セッション記録に出力してしまったのは <strong>①</strong>（github.com の <code>user_session</code>）で、②の古い断片も一度出ています。①は GitBox の仕組みの外にあり、検証のために Chrome の Cookie を自動操作用ブラウザへ写したことで手元に来たものです。切る場所は 3.5 の表の一行目です。</p>
+
+<!-- ============================================================ -->
+<h2 id="quiz">5. クイズ</h2>
+<p>3 章の内容から五問です。選ぶとその場で答え合わせが出ます。</p>
+<div id="quizBox"></div>
+
+<!-- ============================================================ -->
+<h2 id="src">6. 出典</h2>
+<ul>
+<li>RFC 6749 <a href="https://datatracker.ietf.org/doc/html/rfc6749">The OAuth 2.0 Authorization Framework</a>（役割 §1.1、認可コード §4.1、トークン §1.4–1.5）</li>
+<li>RFC 7636 <a href="https://datatracker.ietf.org/doc/html/rfc7636">Proof Key for Code Exchange</a>（§1.1、§4.1–4.2、§4.6）</li>
+<li>RFC 6265 <a href="https://datatracker.ietf.org/doc/html/rfc6265">HTTP State Management Mechanism</a>（§6.1 上限、§8.2 ambient authority、§8.5 ポート）</li>
+<li><a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a>（§1、§2、§3.1.2.1、§3.1.3.7）</li>
+<li>MDN <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie">Set-Cookie</a></li>
+<li>GitHub Docs：<a href="https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps">Authorizing OAuth apps</a>、<a href="https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps">Scopes for OAuth apps</a>、<a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/token-expiration-and-revocation">Token expiration and revocation</a>、<a href="https://docs.github.com/en/site-policy/privacy-policies/github-cookies">GitHub cookies</a></li>
+<li>Supabase Docs：<a href="https://supabase.com/docs/guides/auth/sessions">Sessions</a>、<a href="https://supabase.com/docs/guides/auth/sessions/pkce-flow">PKCE flow</a>、<a href="https://supabase.com/docs/guides/auth/social-login">Social login（Provider tokens）</a>、<a href="https://supabase.com/docs/reference/javascript/auth-getclaims">getClaims</a>、<a href="https://supabase.com/docs/guides/auth/server-side/creating-a-client">Server-side auth</a></li>
+<li>Supabase Auth ソース <a href="https://github.com/supabase/auth/blob/master/internal/api/provider/github.go">internal/api/provider/github.go</a></li>
+<li>Vercel Docs <a href="https://vercel.com/docs/oidc/reference">OIDC Federation Reference</a></li>
+<li>計測：ローカル Supabase（<code>127.0.0.1:54321</code>）の <code>/auth/v1/authorize</code>・<code>/.well-known/jwks.json</code>・<code>/signup</code>、<code>@supabase/ssr</code> 0.12.7 と <code>@supabase/supabase-js</code> 2.117.2 のソース、HeadlessChrome 154 での Cookie 実験。すべて 2026-10-11。</li>
+</ul>
+
+</main>
+
+<script>
+// ---------- 3.1 SameSite simulator (measured, HeadlessChrome 154, 2026-10-11) ----------
+const COOKIES = [
+  { n: 'plain', a: '属性なし' },
+  { n: 'honly', a: 'HttpOnly' },
+  { n: 'lax', a: 'SameSite=Lax' },
+  { n: 'strict', a: 'SameSite=Strict' },
+  { n: 'none', a: 'SameSite=None; Secure' },
+  { n: '__Host-ok', a: 'Secure; Path=/' },
+  { n: 'noneinsecure', a: 'SameSite=None（Secure なし）', rejected: true },
+  { n: '__Host-bad', a: 'Secure; Domain=localhost', rejected: true },
+];
+const SCENES = [
+  { k: 'js', t: 'document.cookie で読む', sent: ['plain', 'lax', 'strict', 'none', '__Host-ok'], word: '読めた',
+    note: '<strong>JavaScript から見える Cookie。</strong> <code>honly</code> だけが現れません。計測値は <code>plain=1; lax=1; strict=1; none=1; __Host-ok=1</code> でした。<code>HttpOnly</code> が守るのはこの一点、つまりスクリプトによる読み出しです。' },
+  { k: 'same', t: '同一サイトの fetch', sent: ['plain', 'honly', 'lax', 'strict', 'none', '__Host-ok'],
+    note: '<strong>サイト A のページから A 自身へ。</strong> 6 個すべてが届きます。<code>honly</code> も届いている点に注目してください。読めない Cookie も、送られはします。' },
+  { k: 'port', t: '同じホストの別ポート', sent: ['plain', 'honly', 'lax', 'strict', 'none', '__Host-ok'],
+    note: '<strong><code>localhost:4801</code> でセットし、<code>localhost:4802</code> へ。</strong> 6 個すべてが届きました。Cookie はポートを区別しません。<code>__Host-</code> 接頭辞が縛るのもホストであって、ポートではありません。' },
+  { k: 'xfetch', t: '別サイトからの fetch', sent: ['none'],
+    note: '<strong>サイト B のスクリプトが <code>fetch(A, { credentials: "include" })</code>。</strong> 届いたのは <code>none</code> だけです。<code>Lax</code> も、属性なしも付きません。別サイトが裏であなたの権限を使うことへの、ブラウザの既定の防御です。' },
+  { k: 'xget', t: '別サイトからのリンク（GET）', sent: ['plain', 'honly', 'lax', 'none', '__Host-ok'],
+    note: '<strong>サイト B のリンクをクリックして A へ画面遷移。</strong> <code>strict</code> 以外すべて届きました。OAuth の帰り道（GitHub → Supabase → GitBox のリダイレクト）はこの種類のリクエストです。セッション Cookie を <code>Strict</code> にすると、外部サイトのリンクから来た最初の表示で「ログアウトしている」ように見えます。' },
+  { k: 'xpost0', t: '別サイトからの POST（セット直後）', sent: ['plain', 'honly', 'none', '__Host-ok'],
+    note: '<strong>サイト B のフォームから A へ POST。Cookie をセットして 0 秒後。</strong> 明示的な <code>lax</code> と <code>strict</code> は付きませんが、<code>SameSite</code> を書かなかった三つ（<code>plain</code>、<code>honly</code>、<code>__Host-ok</code>）が付いて届きました。Chrome は「書かなければ Lax」として扱いますが、セットから 2 分間だけ POST を通す例外があります。' },
+  { k: 'xpost130', t: '別サイトからの POST（130 秒後）', sent: ['none'],
+    note: '<strong>同じ POST を 130 秒後にもう一度。</strong> 今度は <code>none</code> だけです。例外の 2 分が過ぎました。挙動を時間に左右されたくなければ、<code>SameSite=Lax</code> と明示するのが確実です。GitBox の <code>gh_token</code> Cookie も Supabase の Cookie も明示しています。' },
+];
+const simBtns = document.getElementById('simBtns'), simCookies = document.getElementById('simCookies'), simNote = document.getElementById('simNote');
+function drawSim(i) {
+  const s = SCENES[i];
+  [...simBtns.children].forEach((b, j) => b.classList.toggle('on', i === j));
+  simCookies.innerHTML = COOKIES.map((c) => {
+    if (c.rejected) return `<div class="rej"><b>${c.n}</b>${c.a}<br><span class="tag">保存されなかった</span></div>`;
+    const ok = s.sent.includes(c.n);
+    return `<div class="${ok ? 'sent' : 'held'}"><b>${c.n}</b>${c.a}<br><span class="tag">${ok ? (s.word || '届いた') : (s.word ? '読めない' : '届かない')}</span></div>`;
+  }).join('');
+  simNote.innerHTML = s.note;
+}
+SCENES.forEach((s, i) => { const b = document.createElement('button'); b.textContent = s.t; b.onclick = () => drawSim(i); simBtns.appendChild(b); });
+drawSim(0);
+
+// ---------- 3.4 login flow stepper ----------
+const M = '<span class="badge b-m">実測</span>', D = '<span class="badge b-d">文書</span>', C = '<span class="badge b-c">コード</span>';
+const STEPS = [
+  { f: 0, t: 1, l: '「GitHub でログイン」を押す', d: `${C} Server Action <code>signInWithGitHub</code>（<code>auth.ts:52</code>）が走ります。サーバー側の Supabase クライアントが合言葉 <code>code_verifier</code> を作り、<code>sb-&lt;ref&gt;-auth-token-flow-&lt;id&gt;-code-verifier</code> という Cookie に入れてブラウザへ預けます。${M} 行き先として返ってくる URL は次の形でした。<pre><code>/auth/v1/authorize?provider=github
+  &amp;redirect_to=http://localhost:3008/auth/callback
+  &amp;scopes=read:user user:email repo
+  &amp;code_challenge=&lt;43 文字&gt;&amp;code_challenge_method=s256</code></pre>` },
+  { f: 0, t: 2, l: 'Supabase の認可エンドポイントへ', d: `ブラウザは Supabase へ移動します。Supabase は <code>code_challenge</code> を控え、すぐ GitHub へ送り出します（302）。ここが「外側の OAuth」の行きで、Supabase が GitBox に対する認可サーバーの役をしています。` },
+  { f: 2, t: 3, l: 'GitHub の認可画面へ（302）', d: `${M} Supabase が組み立てた URL です。<pre><code>https://github.com/login/oauth/authorize
+  ?client_id=Ov23…（20 文字）
+  &amp;redirect_uri=http://127.0.0.1:54321/auth/v1/callback
+  &amp;response_type=code
+  &amp;scope=user:email read:user user:email repo
+  &amp;state=&lt;36 文字&gt;</code></pre>戻り先は GitBox ではなく <strong>Supabase</strong> です。GitHub から見たクライアントは Supabase だからです。<code>code_challenge</code> はありません。${C} Supabase Auth の GitHub プロバイダーは <code>RequiresPKCE()</code> が <code>false</code> で、代わりに <code>client_secret</code> を使います。` },
+  { f: 3, t: 3, l: '会員証①で本人確認、同意', d: `ここが、三枚のうち①（<code>user_session</code>）が登場する唯一の場面です。ブラウザは github.com 宛てのリクエストに①を自動で添付し、GitHub はそれを見て「ログイン済みの誰か」を知ります。初回は「GitBox にこの権限を与えますか」の同意画面が出ます。二回目以降は同意画面を挟まずに次へ進みます（このリポジトリの <code>CLAUDE.md</code> にも、localhost の OAuth が追加の確認なしで完了すると記録されています）。${D} GitHub の文書がこの省略を明記しているのは <code>scope</code> を省いた場合で、「the user won't be shown the OAuth authorization page with the list of scopes」とあります。同じスコープを明示した場合については文書に記載が見つからず、ここは観察にもとづく記述です。` },
+  { f: 3, t: 2, l: 'Supabase へ戻す：?code=…&state=…', d: `ブラウザ経由のリダイレクトです。${D} <code>code</code> は 10 分で失効する引換券で、これだけでは何もできません。<code>client_secret</code> を知っている者だけがトークンに引き換えられます。Supabase は <code>state</code> が自分の出した値と一致するかを確かめます。` },
+  { f: 2, t: 3, l: '裏の道：code ＋ client_secret → gho_…', d: `ブラウザを通らない、サーバー同士の通信です。${D} <code>POST https://github.com/login/oauth/access_token</code> に <code>client_id</code>、<code>client_secret</code>、<code>code</code> を送ると、<code>access_token=gho_…&amp;scope=…&amp;token_type=bearer</code> が返ります。これが委任状③です。<br>${C} 続けて Supabase は、この③を使って <code>api.github.com/user</code> と <code>/user/emails</code> を呼び、あなたが誰かを知ります。ID Token が無いので、聞きに行くしかないのです。` },
+  { f: 2, t: 2, l: 'ユーザーとセッションを作る', d: `Supabase は GitHub の利用者 ID をもとにユーザー行を作る（または見つける）と、セッション行と refresh token を作ります。入館証②の台帳はここにあります。${D} ③はここで保存されません。「Provider tokens are intentionally not stored in your project's database」。` },
+  { f: 2, t: 1, l: 'GitBox へ戻す：/auth/callback?code=…', d: `二枚目の引換券です。今度は Supabase が発行したもので、${D}「has a validity of 5 minutes and can only be exchanged for an access token once」。このリダイレクトは別サイト発のトップレベル GET なので、最初に預けた <code>code-verifier</code> の Cookie（<code>SameSite=Lax</code>）が付いて GitBox に届きます。3.1 の事実 5 です。` },
+  { f: 1, t: 2, l: 'exchangeCodeForSession(code)', d: `${C} <code>route.ts:36</code>。GitBox のサーバーが、<code>code</code> と Cookie から取り出した <code>code_verifier</code> を Supabase に送ります。Supabase は SHA-256 を計算し、行きに控えた <code>code_challenge</code> と照合します。${D} だから「the code exchange must be initiated on the same browser and device where the flow was started」。合言葉を持っているのは、最初にボタンを押したブラウザだけです。` },
+  { f: 2, t: 1, l: 'セッション一式（JWT, refresh token, provider_token）', d: `${M} 応答の形は <code>access_token</code>（ES256 の JWT、3600 秒）、<code>refresh_token</code>、<code>expires_in</code>、<code>user</code> です。GitHub ログインの場合はここに <code>provider_token</code>、つまり③が一度だけ同梱されます（${C} <code>route.ts:47</code> が読んでいる値）。` },
+  { f: 1, t: 0, l: 'Set-Cookie ②と③、/boards へ', d: `${C}${M} GitBox は二種類の Cookie を預けます。②は <code>sb-&lt;ref&gt;-auth-token.0</code> と <code>.1</code>（3180 文字で分割）。③は <code>gh_token_&lt;ref8&gt;</code>（<code>HttpOnly</code>、30 日）。そして <code>/boards</code> へリダイレクトします。ログインはここで終わりです。` },
+  { f: 0, t: 1, l: '以後の毎リクエスト：Cookie ②③つき', d: `${C} <code>proxy.ts:128</code> の <code>getClaims()</code> が②の JWT を公開鍵で検証します。${D} 非対称鍵のプロジェクトでは検証はローカルで行われ、期限が近ければ先に refresh token で更新します。リポジトリ一覧が要るときは <code>getGitHubToken()</code>（<code>axios-github.ts:57</code>）が③を Cookie から読み、<code>Authorization: Bearer gho_…</code> として <code>api.github.com</code> に渡します。①はもう出てきません。` },
+];
+const rows = document.getElementById('flowRows'), detail = document.getElementById('flowDetail'), pos = document.getElementById('pos');
+let cur = 0, showAll = false;
+rows.innerHTML = STEPS.map((s, i) => {
+  const a = Math.min(s.f, s.t) + 1, b = Math.max(s.f, s.t) + 2;
+  const cls = s.f === s.t ? 'self' : (s.f < s.t ? 'ltr' : 'rtl');
+  const style = s.f === s.t ? `grid-column:${a}/${a + 1}` : `grid-column:${a}/${b};--n:${b - a}`;
+  const line = s.f === s.t ? '' : '<div class="ln"></div>';
+  return `<div class="row" data-i="${i}"><div class="arr ${cls}" style="${style}"><span class="lbl"><span class="num">${i + 1}</span>${s.l}</span>${line}</div></div>`;
+}).join('');
+function drawFlow() {
+  [...rows.children].forEach((r, i) => { r.classList.toggle('future', !showAll && i > cur); r.classList.toggle('current', i === cur); r.style.cursor = 'pointer'; r.onclick = () => { cur = i; drawFlow(); }; });
+  detail.innerHTML = `<strong>${cur + 1}. ${STEPS[cur].l}</strong><br>${STEPS[cur].d}`;
+  pos.textContent = `${cur + 1} / ${STEPS.length}（行をクリックしても移動できます）`;
+}
+document.getElementById('prev').onclick = () => { cur = Math.max(0, cur - 1); drawFlow(); };
+document.getElementById('next').onclick = () => { cur = Math.min(STEPS.length - 1, cur + 1); drawFlow(); };
+document.getElementById('all').onclick = (e) => { showAll = !showAll; e.target.classList.toggle('on', showAll); drawFlow(); };
+drawFlow();
+
+// ---------- 5. quiz ----------
+const QUIZ = [
+  { q: 'GitHub から GitBox へ戻ってくる OAuth のリダイレクト（別サイト発のトップレベル GET）に、ブラウザが添付する Cookie はどれですか。',
+    o: [
+      ['SameSite=Strict の Cookie だけ', false, 'Strict は別サイト発のリクエストには一切付きません。計測でも、リンク遷移で届かなかったのは strict だけでした。'],
+      ['SameSite=Lax と None の Cookie（Strict は付かない）', true, '計測では、別サイトからのリンク遷移に strict 以外のすべてが届きました。PKCE の code_verifier を入れた Cookie が Lax なのは、この帰り道で必要だからです。'],
+      ['SameSite=None の Cookie だけ', false, 'それは別サイトからの fetch（サブリソース）の場合です。トップレベルの GET 遷移なら Lax も付きます。'],
+      ['どれも付かない。リダイレクトは Cookie を運ばない', false, 'リダイレクト先へのリクエストは普通のリクエストで、条件に合う Cookie が付きます。'],
+    ] },
+  { q: 'Cookie に HttpOnly を付けると、何が起きますか。',
+    o: [
+      ['HTTPS のときだけ送られるようになる', false, 'それは Secure 属性です。'],
+      ['JavaScript から読めなくなり、fetch にも付かなくなる', false, '前半は正しいですが、後半が違います。計測では honly は document.cookie に現れず、fetch には付いて届きました。'],
+      ['JavaScript（document.cookie）から読めなくなるが、リクエストには変わらず付く', true, 'MDN も「will still be sent with JavaScript-initiated requests」と明記しています。XSS による持ち出しは防げますが、そのページからリクエストを送られることは防げません。'],
+      ['別サイトからのリクエストに付かなくなる', false, 'それは SameSite の役割です。'],
+    ] },
+  { q: 'PKCE で、認可サーバーはトークン交換のときに何を確かめますか。',
+    o: [
+      ['code_verifier が client_secret と一致するか', false, 'code_verifier はフローごとに作る使い捨ての値で、client_secret とは無関係です。'],
+      ['BASE64URL(SHA256(code_verifier)) が、最初に受け取った code_challenge と一致するか', true, 'RFC 7636 §4.6 の式そのものです。行きに送るのはハッシュだけなので、認可コードを横取りした者は合言葉を出せません。'],
+      ['state が redirect_uri のハッシュと一致するか', false, 'state は CSRF 対策で、クライアント側が行きと帰りの一致を確かめるものです。'],
+      ['code_challenge が JWT として正しく署名されているか', false, 'code_challenge はただのハッシュ値で、JWT ではありません。計測では 43 文字でした。'],
+    ] },
+  { q: 'GitBox で GitHub API を呼ぶためのトークン（gho_…）は、ログイン後どこに保管されていますか。',
+    o: [
+      ['Supabase のデータベース。必要なときに Supabase から取り出す', false, 'Supabase は「Provider tokens are intentionally not stored in your project\'s database」と明言しています。'],
+      ['Next.js サーバーのメモリ', false, 'Vercel の関数はリクエストごとに使い捨てで、覚えておく場所がありません。コードにもそのような保存処理はありません。'],
+      ['ブラウザの HttpOnly Cookie（gh_token_<ref8>）。ログイン直後に GitBox が預ける', true, 'route.ts:47-49 が session.provider_token を読み、cookies.ts:71-79 が HttpOnly・SameSite=Lax・30 日で保存します。計測でも本番の Cookie は HttpOnly と Secure が付いていました。'],
+      ['github.com の user_session Cookie の中', false, 'user_session は github.com 自身のログイン用で、GitBox には送られません。'],
+    ] },
+  { q: 'Supabase の access token（JWT）について、正しいものはどれですか。',
+    o: [
+      ['暗号化されているので、中身は Supabase にしか読めない', false, 'JWT は署名されているだけで、暗号化はされていません。base64 を戻せば誰でも読めます。計測でもそうして分解しました。'],
+      ['GitBox は毎回 Supabase に問い合わせて有効性を確かめている', false, 'proxy.ts は getClaims() を使っており、非対称鍵のプロジェクトでは公開鍵（JWKS）でローカルに検証します。'],
+      ['公開鍵で署名を検証できるので、発行者に問い合わせずに有効性を確かめられる。そのぶん、期限まで取り消しにくい', true, '計測したトークンは ES256 で、同じ kid の公開鍵が /.well-known/jwks.json にありました。寿命は 3600 秒。短命にしてあるのは、取り消しにくさの裏返しです。'],
+      ['期限がなく、サインアウトするまで有効', false, '計測では exp − iat が 3600 秒でした。期限がないのは refresh token のほうです（ただし 1 回使い切り）。'],
+    ] },
+];
+const qb = document.getElementById('quizBox');
+QUIZ.forEach((item, qi) => {
+  const box = document.createElement('div'); box.className = 'q';
+  box.innerHTML = `<p class="t">Q${qi + 1}. ${item.q}</p>`;
+  const fb = document.createElement('div'); fb.className = 'fb';
+  item.o.forEach(([text, ok, why]) => {
+    const b = document.createElement('button'); b.textContent = text;
+    b.onclick = () => {
+      [...box.querySelectorAll('button')].forEach((x) => x.classList.remove('right', 'wrong'));
+      b.classList.add(ok ? 'right' : 'wrong');
+      fb.innerHTML = (ok ? '<strong style="color:var(--ok)">正解。</strong> ' : '<strong style="color:var(--ng)">不正解。</strong> ') + why.replace(/</g, '&lt;');
+    };
+    box.appendChild(b);
+  });
+  box.appendChild(fb); qb.appendChild(box);
+});
+</script>
+</body>
+</html>
