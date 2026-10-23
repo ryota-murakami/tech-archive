@@ -2,9 +2,8 @@ node_modules/
 .DS_Store
 site/data/articles.json
 
-# Local agent state and instructions
+# Local agent state. AGENTS.md stays tracked so every clone publishes articles the same way.
 .gstack/
-AGENTS.md
 .impeccable/config.json
 .impeccable/build/pending.json
 .impeccable/questions/
