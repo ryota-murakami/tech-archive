@@ -421,7 +421,14 @@ function getCategoryCounts() {
   return counts;
 }
 
-/** Updates global article and month totals after the real manifest is available; called by renderAll. @returns {void} @example renderArchiveStatus() */
+/**
+ * Shows the collection's size once its real metadata is available.
+ * Called by {@link renderAll} after loading or changing filters.
+ *
+ * @returns {void}
+ * @example
+ * renderArchiveStatus();
+ */
 function renderArchiveStatus() {
   const months = new Set();
 
@@ -434,12 +441,14 @@ function renderArchiveStatus() {
 
   elements.archiveStatus.innerHTML =
     "<span><strong>" +
-    String(state.articles.length).padStart(3, "0") +
+    String(state.articles.length).padStart(2, "0") +
     "</strong> articles</span>" +
     "<span><strong>" +
-    String(months.size).padStart(3, "0") +
-    "</strong> months indexed</span>" +
-    "<span>GitHub Pages · HTML</span>";
+    String(Math.max(0, state.categories.length - 1)).padStart(2, "0") +
+    "</strong> subjects</span>" +
+    "<span><strong>" +
+    String(months.size).padStart(2, "0") +
+    "</strong> months</span>";
   elements.categoryTotal.textContent = String(
     Math.max(0, state.categories.length - 1),
   ).padStart(2, "0");
@@ -467,7 +476,15 @@ function renderCategories() {
   elements.categoryList.innerHTML = markup;
 }
 
-/** Describes the current result count and active constraints after every filter change; called by renderAll. @param {number} resultCount Number of matching articles. @returns {void} @example renderResultSummary(3) */
+/**
+ * Keeps readers oriented when the collection is narrowed.
+ * Called by {@link renderAll} after loading or changing filters.
+ *
+ * @param {number} resultCount - Number of notes matching every active filter.
+ * @returns {void}
+ * @example
+ * renderResultSummary(3);
+ */
 function renderResultSummary(resultCount) {
   const filters = [];
 
@@ -485,17 +502,27 @@ function renderResultSummary(resultCount) {
   }
 
   const filterLabel =
-    filters.length > 0 ? filters.join(" · ") : "All subjects · All dates";
+    filters.length > 0 ? filters.join(" · ") : "Newest first";
 
   elements.resultSummary.innerHTML =
     "<span><strong>" +
     String(resultCount).padStart(2, "0") +
-    " </strong>entries found</span><span>" +
+    "</strong> " +
+    (resultCount === 1 ? "note" : "notes") +
+    " in the collection</span><span>" +
     escapeHtml(filterLabel) +
     "</span>";
 }
 
-/** Produces escaped article metadata for one visible index row; called by renderArticle. @param {object} article Normalized article. @returns {string} Safe metadata markup. @example renderArticleMeta(article) */
+/**
+ * Gives readers date, source, and subject context beneath a note preview.
+ * Called by {@link renderArticle} for each visible document.
+ *
+ * @param {object} article - Normalized metadata with optional source and reading time.
+ * @returns {string} Escaped metadata markup.
+ * @example
+ * renderArticleMeta(article);
+ */
 function renderArticleMeta(article) {
   let markup = "";
 
@@ -515,18 +542,13 @@ function renderArticleMeta(article) {
     markup += "<span>" + String(article.readingMinutes) + " min read</span>";
   }
 
-  const contextParts = [article.type];
-
   // Source is optional because many personal notes have no external repository.
   if (article.source) {
-    contextParts.push(article.source);
+    markup +=
+      '<span class="article-context">' +
+      escapeHtml(article.source) +
+      "</span>";
   }
-
-  // Type and source remain available beneath the title without competing with it.
-  markup +=
-    '<span class="article-context">' +
-    escapeHtml(contextParts.join(" · ")) +
-    "</span>";
 
   // Every category remains visible even when a row was reached through another subject.
   for (const category of article.categories) {
@@ -540,7 +562,16 @@ function renderArticleMeta(article) {
   return markup;
 }
 
-/** Builds one fully escaped index row from a normalized manifest record; called by renderArticles. @param {object} article Normalized article. @param {boolean} isFeatured Whether this is the page's lead row. @returns {string} Safe article markup. @example renderArticle(article, true) */
+/**
+ * Presents a note with its format, reading context, and safe document link.
+ * Called by {@link renderArticles} whenever the visible collection changes.
+ *
+ * @param {object} article - Normalized metadata from the generated index.
+ * @param {boolean} isFeatured - Whether the note leads this result page.
+ * @returns {string} Escaped article markup ready for the collection.
+ * @example
+ * renderArticle(article, true);
+ */
 function renderArticle(article, isFeatured) {
   const safeTitle = escapeHtml(article.title);
   const titleMarkup = article.href
@@ -555,19 +586,25 @@ function renderArticle(article, isFeatured) {
   const codeMarkup = article.code
     ? '<code class="code-slip">' + escapeHtml(article.code) + "</code>"
     : "";
+  // Only the newest document receives the label, including within filtered results.
+  const folioMarkup = article.id === state.articles[0]?.id
+    ? '<span class="latest-label">Latest note</span>'
+    : '<span class="folio">' + String(article.sequence).padStart(2, "0") + "</span>";
 
+  // Excerpts use native line clamping; a measured full height would defeat the preview limit.
   return (
     '<article class="article-row' +
     (isFeatured ? " featured" : "") +
     '">' +
-    '<div class="folio" aria-hidden="true">' +
-    String(article.sequence).padStart(2, "0") +
-    "</div>" +
+    '<div class="article-topline">' +
+    folioMarkup +
+    '<span class="topline-divider" aria-hidden="true">/</span>' +
+    '<span class="article-kind">' + escapeHtml(article.type) + "</span></div>" +
     '<div class="article-body">' +
     '<h3 class="article-heading">' +
     titleMarkup +
     "</h3>" +
-    '<p class="article-excerpt" data-pretext>' +
+    '<p class="article-excerpt">' +
     escapeHtml(article.description) +
     "</p>" +
     '<div class="article-meta">' +
@@ -653,7 +690,7 @@ function renderCalendar() {
   const publishedDates = new Set();
   let markup = "";
 
-  // Only dated records create blue publication marks.
+  // Only dated records create publication dots.
   for (const article of state.articles) {
     if (article.published) {
       publishedDates.add(article.published);
@@ -806,9 +843,9 @@ function renderLoadingState() {
   state.status = "loading";
   elements.catalog.setAttribute("aria-busy", "true");
   elements.resultSummary.innerHTML =
-    "<span><strong>—</strong> loading entries</span><span>Committed HTML documents</span>";
+    "<span>Opening the collection…</span><span>Newest first</span>";
   elements.articleList.innerHTML =
-    '<div class="loading-state" role="status"><span class="loading-rule" aria-hidden="true"></span><strong>Opening the index…</strong><p>Reading the generated article index.</p></div>';
+    '<div class="loading-state" role="status"><span class="loading-rule" aria-hidden="true"></span><strong>Opening the index…</strong><p>Your next rabbit hole is on its way.</p></div>';
   elements.pagination.innerHTML = "";
   elements.clearButton.disabled = true;
 }
@@ -820,7 +857,7 @@ function renderErrorState() {
   elements.resultSummary.innerHTML =
     "<span><strong>00</strong> entries available</span><span>Index unavailable</span>";
   elements.articleList.innerHTML =
-    '<div class="error-state" role="alert"><strong>The index could not open.</strong><p>The generated article index is unavailable. Try loading it again.</p><button class="retry-button" id="retry-button" type="button">Try again</button></div>';
+    '<div class="error-state" role="alert"><strong>The index could not open.</strong><p>The collection is temporarily unavailable. Please try again.</p><button class="retry-button" id="retry-button" type="button">Try again</button></div>';
   elements.pagination.innerHTML = "";
   elements.clearButton.disabled = true;
 }

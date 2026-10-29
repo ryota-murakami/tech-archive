@@ -1,99 +1,170 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Laststance Archive, a searchable index of standalone technical explainers.">
-    <meta name="theme-color" content="#f1f0e9">
-    <title>Laststance Archive — Technical notes</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Laststance Archive — a growing collection of technical explainers, hands-on guides, and ideas worth keeping."
+    />
+    <meta name="theme-color" content="#f7f5f0" />
+    <title>Laststance Archive — Curiosity, collected.</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%239d4934'/%3E%3Cpath d='M11 10h5v19h-5zm8 0h5v19h-5zm8 3 4-1 5 17-4 1z' fill='%23f7f5f0' transform='translate(-3 0)'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&amp;family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <a class="skip-link" href="#catalog">Skip to article index</a>
-
     <header class="topbar">
       <a class="brand" href="./" aria-label="Laststance Archive home">
-        <span class="brand-mark">Laststance Archive</span>
-        <span class="brand-note">Personal technical index</span>
+        <svg class="brand-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M5 5h4v22H5zm8 0h4v22h-4zm7 3 4-1 5 19-4 1z" fill="currentColor" />
+        </svg>
+        <span class="brand-mark"
+          >laststance<span class="brand-divider">/</span
+          ><span class="brand-name">archive</span></span
+        >
       </a>
-      <div class="archive-status" id="archive-status" aria-label="Archive status">
-        <span><strong>—</strong> articles</span>
-        <span><strong>—</strong> months indexed</span>
-        <span>Static HTML · GitHub Pages</span>
-      </div>
+      <nav class="header-nav" aria-label="Main navigation">
+        <a class="nav-index" href="#catalog">The index</a>
+        <a class="github-link" href="https://github.com/ryota-murakami/tech-archive"
+          >GitHub <span aria-hidden="true">↗</span></a
+        >
+      </nav>
     </header>
-
     <main class="archive-shell">
       <section class="index-head" aria-labelledby="page-title">
         <div class="index-intro">
-          <h1 id="page-title" data-pretext>Find the note you need.</h1>
-          <p data-pretext>Search by title, narrow by subject or date, then open the original HTML document.</p>
+          <p class="eyebrow">
+            <span class="status-dot" aria-hidden="true"></span>A developer’s field notes
+          </p>
+          <h1 id="page-title">Curiosity,<br /><em>collected.</em></h1>
         </div>
-
+        <div class="index-description">
+          <p>A place for the things<br />worth figuring out.</p>
+          <p class="index-deck">
+            Technical deep dives, hands-on guides, and notes from building for the web. Collected
+            here, ready to revisit.
+          </p>
+          <div class="archive-status" id="archive-status" aria-label="Archive status">
+            <span><strong>—</strong> articles</span><span><strong>—</strong> subjects</span
+            ><span><strong>—</strong> months</span>
+          </div>
+        </div>
+        <span class="hero-margin-note" aria-hidden="true">LEARN. BUILD. KEEP THE NOTES.</span>
+      </section>
+      <section class="index-tools" aria-label="Search the archive">
+        <div class="collection-label">
+          <span class="section-number" aria-hidden="true">01 /</span>
+          <h2>The collection</h2>
+        </div>
         <div class="search-row">
           <div class="search-field">
-            <label for="search-input">Search article titles</label>
-            <input id="search-input" type="search" autocomplete="off" placeholder="Remember a word…" aria-controls="article-list">
+            <label class="visually-hidden" for="search-input">Search article titles</label>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 4.5 4.5" />
+            </svg>
+            <input
+              id="search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Find a title, an idea, a rabbit hole…"
+              aria-controls="article-list"
+            />
           </div>
-          <button class="clear-button" id="clear-button" type="button" disabled>Clear filters</button>
-        </div>
-
-        <div class="result-summary" id="result-summary" aria-live="polite">
-          <span><strong>—</strong> loading entries</span>
-          <span>Committed HTML documents</span>
+          <button class="clear-button" id="clear-button" type="button" disabled>
+            Clear filters <span aria-hidden="true">↺</span>
+          </button>
         </div>
       </section>
-
       <div class="archive-grid">
         <aside class="category-rail" aria-labelledby="category-title">
           <h2 class="rail-heading" id="category-title">
-            <span>Subjects</span>
-            <span id="category-total">—</span>
+            <span>Explore subjects</span><span id="category-total">—</span>
           </h2>
           <nav class="category-list" id="category-list" aria-label="Article categories"></nav>
         </aside>
-
-        <section class="catalog" id="catalog" aria-labelledby="catalog-title" aria-busy="true">
+        <section
+          class="catalog"
+          id="catalog"
+          aria-labelledby="catalog-title"
+          aria-busy="true"
+          tabindex="-1"
+        >
           <h2 id="catalog-title" class="visually-hidden">Article index</h2>
+          <div class="result-summary" id="result-summary" aria-live="polite">
+            <span>Opening the collection…</span><span>Newest first</span>
+          </div>
           <div class="article-list" id="article-list">
             <div class="loading-state" role="status">
-              <span class="loading-rule" aria-hidden="true"></span>
-              <strong>Opening the index…</strong>
-              <p>Reading the generated article index.</p>
+              <span class="loading-rule" aria-hidden="true"></span
+              ><strong>Opening the index…</strong>
+              <p>Your next rabbit hole is on its way.</p>
             </div>
           </div>
           <nav class="pagination" id="pagination" aria-label="Archive pages"></nav>
         </section>
-
         <aside class="calendar-rail" aria-labelledby="calendar-title">
           <h2 class="rail-heading" id="calendar-title">
-            <span>Date</span>
-            <span>Filter</span>
+            <span>Browse by date</span
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <rect x="3.5" y="5.5" width="17" height="15" rx="2" />
+              <path d="M7.5 3v5m9-5v5M4 11h16" />
+            </svg>
           </h2>
           <div class="calendar-card">
             <div class="calendar-nav">
-              <button type="button" id="previous-month" aria-label="Previous month">Prev</button>
+              <button type="button" id="previous-month" aria-label="Previous month">←</button>
               <div class="month-label" id="month-label" aria-live="polite">—</div>
-              <button type="button" id="next-month" aria-label="Next month">Next</button>
+              <button type="button" id="next-month" aria-label="Next month">→</button>
             </div>
             <div class="calendar-weekdays" aria-hidden="true">
-              <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+              <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span
+              ><span>S</span>
             </div>
-            <div class="calendar-grid" id="calendar-grid" role="group" aria-label="Monthly article calendar"></div>
-            <p class="calendar-note">Blue marks show publication days. Any day can be selected.</p>
+            <div
+              class="calendar-grid"
+              id="calendar-grid"
+              role="group"
+              aria-label="Monthly article calendar"
+            ></div>
+            <p class="calendar-note">
+              <span class="status-dot" aria-hidden="true"></span>A dot marks a day with a new note.
+            </p>
+          </div>
+          <div class="rail-note">
+            <span aria-hidden="true">↳</span>
+            <p>Follow a thread.<br />See where it takes you.</p>
           </div>
         </aside>
       </div>
     </main>
-
     <footer>
-      <span>Laststance Archive</span>
-      <span>Index generated from committed HTML</span>
+      <a class="footer-brand" href="./">laststance <span>archive</span></a>
+      <p>A growing collection. An ongoing curiosity.</p>
+      <a class="back-to-top" href="#page-title">Back to top <span aria-hidden="true">↑</span></a>
     </footer>
-
     <script type="module" src="./app.js"></script>
   </body>
 </html>
